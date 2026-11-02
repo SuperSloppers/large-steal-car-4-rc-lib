@@ -37,6 +37,10 @@ class InputSystem : public system::IInputSystem {
   void Shutdown() override;
 
   void AddDriver(std::unique_ptr<InputDriver> driver);
+  // Configure before polling starts. The first connected physical source owns
+  // its slot; keyboard emulation cannot add another binding to the same pad.
+  void SetExclusiveGamepad(bool enabled) { exclusive_gamepad_ = enabled; }
+  bool exclusive_gamepad() const { return exclusive_gamepad_; }
   void AttachWindow(rex::ui::Window* window);
   void SetActiveCallback(std::function<bool()> callback);
 
@@ -46,7 +50,8 @@ class InputSystem : public system::IInputSystem {
   // driver. Game-specific bridges use this to observe controller buttons at a
   // deterministic guest poll boundary without consuming transient input a
   // second time.
-  bool TryGetLastState(uint32_t user_index, X_INPUT_STATE* out_state);
+  bool TryGetLastState(uint32_t user_index, X_INPUT_STATE* out_state,
+                       bool* physical_gamepad = nullptr);
   X_RESULT SetState(uint32_t user_index, X_INPUT_VIBRATION* vibration);
   X_RESULT GetKeystroke(uint32_t user_index, uint32_t flags, X_INPUT_KEYSTROKE* out_keystroke);
   bool TryGetMotionState(uint32_t user_index, MotionState* out_state);
@@ -57,6 +62,7 @@ class InputSystem : public system::IInputSystem {
     uint32_t packet_number = 0;
     bool initialized = false;
     bool available = false;
+    bool physical_gamepad = false;
   };
 
   struct DriverTraceTracker {
@@ -66,6 +72,7 @@ class InputSystem : public system::IInputSystem {
   };
 
   rex::ui::Window* window_ = nullptr;
+  bool exclusive_gamepad_ = false;
   std::function<bool()> is_active_callback_;
 
   std::vector<std::unique_ptr<InputDriver>> drivers_;
@@ -77,6 +84,6 @@ class InputSystem : public system::IInputSystem {
 
 /// Create a default InputSystem with SDL + NOP drivers.
 /// In tool mode, only the NOP driver is added.
-std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode);
+std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode, bool prefer_xinput = false);
 
 }  // namespace rex::input

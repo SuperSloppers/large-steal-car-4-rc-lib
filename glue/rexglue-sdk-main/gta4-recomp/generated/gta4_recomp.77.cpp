@@ -28966,7 +28966,7 @@ loc_829E2DD0:
 	if (ctx.cr6.eq) goto loc_829E2DE4;
 	// bl 0x82a11f68
 	ctx.lr = 0x829E2DE0;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// stw r28,432(r31)
 	REX_STORE_U32(ctx.r31.u32 + 432, ctx.r28.u32);
 loc_829E2DE4:
@@ -29253,7 +29253,7 @@ loc_829E2FC0:
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r1.u32 + 92);
 	// bl 0x82a11f68
 	ctx.lr = 0x829E2FC8;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// addi r3,r1,80
 	ctx.r3.s64 = ctx.r1.s64 + 80;
 	// bl 0x82a12cd0
@@ -29782,7 +29782,7 @@ DEFINE_REX_FUNC(sub_829E3300) {
 	if (ctx.cr6.eq) goto loc_829E334C;
 	// bl 0x82a11f68
 	ctx.lr = 0x829E3348;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// stw r28,432(r29)
 	REX_STORE_U32(ctx.r29.u32 + 432, ctx.r28.u32);
 loc_829E334C:
@@ -36032,7 +36032,7 @@ loc_829E5D68:
 	if (ctx.cr6.eq) goto loc_829E5D7C;
 	// bl 0x82a11f68
 	ctx.lr = 0x829E5D78;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// stw r30,40(r31)
 	REX_STORE_U32(ctx.r31.u32 + 40, ctx.r30.u32);
 loc_829E5D7C:
@@ -55889,7 +55889,7 @@ loc_829EE344:
 	ctx.r3.u64 = ctx.r30.u64;
 	// bl 0x82a11f68
 	ctx.lr = 0x829EE34C;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 loc_829EE34C:
 	// mr r3,r31
 	ctx.r3.u64 = ctx.r31.u64;
@@ -56737,7 +56737,7 @@ loc_829EE910:
 	ctx.r3.u64 = ctx.r25.u64;
 	// bl 0x82a11f68
 	ctx.lr = 0x829EE918;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 loc_829EE918:
 	// lwz r3,-6968(r24)
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r24.u32 + -6968);
@@ -56959,7 +56959,7 @@ DEFINE_REX_FUNC(sub_829EEA68) {
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r31.u32 + 0);
 	// bl 0x82a11f68
 	ctx.lr = 0x829EEA88;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// li r11,0
 	ctx.r11.s64 = 0;
 	// addi r30,r31,16
@@ -58274,7 +58274,7 @@ loc_829EF334:
 	if (ctx.cr6.eq) goto loc_829EF344;
 	// bl 0x82a11f68
 	ctx.lr = 0x829EF344;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 loc_829EF344:
 	// cmplwi cr6,r26,0
 	ctx.cr6.compare<uint32_t>(ctx.r26.u32, 0, ctx.xer);
@@ -58284,7 +58284,7 @@ loc_829EF344:
 	ctx.r3.u64 = ctx.r26.u64;
 	// bl 0x82a11f68
 	ctx.lr = 0x829EF354;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 loc_829EF354:
 	// mr r3,r30
 	ctx.r3.u64 = ctx.r30.u64;

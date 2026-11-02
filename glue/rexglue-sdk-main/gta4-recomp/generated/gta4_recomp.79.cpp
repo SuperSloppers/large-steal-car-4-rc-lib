@@ -4716,7 +4716,7 @@ loc_82A03E40:
 	ctx.r5.u64 = ctx.r31.u64;
 	// bl 0x82a17180
 	ctx.lr = 0x82A03E50;
-	RtlAllocateHeap(ctx, base);
+	gta4_RtlAllocateHeap(ctx, base);
 	// mr. r29,r3
 	ctx.r29.u64 = ctx.r3.u64;
 	ctx.cr0.compare<int32_t>(ctx.r29.s32, 0, ctx.xer);
@@ -4811,7 +4811,7 @@ DEFINE_REX_FUNC(ppc_free) {
 	ctx.r5.u64 = ctx.r31.u64;
 	// bl 0x82a17a68
 	ctx.lr = 0x82A03EE4;
-	RtlFreeHeap(ctx, base);
+	gta4_RtlFreeHeap(ctx, base);
 	// cmpwi r3,0
 	ctx.cr0.compare<int32_t>(ctx.r3.s32, 0, ctx.xer);
 	// bne 0x82a03f00
@@ -5417,7 +5417,7 @@ loc_82A042CC:
 	ctx.r5.u64 = ctx.r31.u64;
 	// bl 0x82a17180
 	ctx.lr = 0x82A042E8;
-	RtlAllocateHeap(ctx, base);
+	gta4_RtlAllocateHeap(ctx, base);
 	// cmplwi r3,0
 	ctx.cr0.compare<uint32_t>(ctx.r3.u32, 0, ctx.xer);
 	// bne 0x82a04330
@@ -5596,7 +5596,7 @@ loc_82A043F8:
 	ctx.r6.u64 = ctx.r31.u64;
 	// bl 0x82a17d50
 	ctx.lr = 0x82A0440C;
-	RtlReAllocateHeap(ctx, base);
+	gta4_RtlReAllocateHeap(ctx, base);
 	// mr. r30,r3
 	ctx.r30.u64 = ctx.r3.u64;
 	ctx.cr0.compare<int32_t>(ctx.r30.s32, 0, ctx.xer);
@@ -7162,7 +7162,7 @@ loc_82A04E54:
 	ctx.r5.u64 = ctx.r31.u64;
 	// bl 0x82a16418
 	ctx.lr = 0x82A04E64;
-	RtlSizeHeap(ctx, base);
+	gta4_RtlSizeHeap(ctx, base);
 loc_82A04E64:
 	// addi r1,r1,96
 	ctx.r1.s64 = ctx.r1.s64 + 96;
@@ -20714,7 +20714,7 @@ loc_82A0A84C:
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r9.u32 + ctx.r28.u32);
 	// bl 0x82a13618
 	ctx.lr = 0x82A0A870;
-	WriteFile(ctx, base);
+	gta4_WriteFile(ctx, base);
 	// cmpwi r3,0
 	ctx.cr0.compare<int32_t>(ctx.r3.s32, 0, ctx.xer);
 	// beq 0x82a0a8c4
@@ -20748,7 +20748,7 @@ loc_82A0A898:
 	ctx.r4.u64 = ctx.r24.u64;
 	// bl 0x82a13618
 	ctx.lr = 0x82A0A8B0;
-	WriteFile(ctx, base);
+	gta4_WriteFile(ctx, base);
 	// cmpwi r3,0
 	ctx.cr0.compare<int32_t>(ctx.r3.s32, 0, ctx.xer);
 	// beq 0x82a0a8c4
@@ -21693,7 +21693,7 @@ loc_82A0AE5C:
 	sub_82A0F208(ctx, base);
 	// bl 0x82a11f68
 	ctx.lr = 0x82A0AE68;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// cmpwi r3,0
 	ctx.cr0.compare<int32_t>(ctx.r3.s32, 0, ctx.xer);
 	// bne 0x82a0ae7c
@@ -26554,7 +26554,7 @@ loc_82A0CDBC:
 	ctx.r5.s64 = ctx.r1.s64 + 80;
 	// bl 0x82a127e0
 	ctx.lr = 0x82A0CDCC;
-	SetFilePointer(ctx, base);
+	gta4_SetFilePointer(ctx, base);
 	// stw r3,84(r1)
 	REX_STORE_U32(ctx.r1.u32 + 84, ctx.r3.u32);
 	// cmpwi cr6,r3,-1
@@ -32460,7 +32460,7 @@ loc_82A0F480:
 	sub_82A0F208(ctx, base);
 	// bl 0x82a188e0
 	ctx.lr = 0x82A0F4D4;
-	FlushFileBuffers(ctx, base);
+	gta4_FlushFileBuffers(ctx, base);
 	// cmpwi r3,0
 	ctx.cr0.compare<int32_t>(ctx.r3.s32, 0, ctx.xer);
 	// bne 0x82a0f4e8
@@ -35175,7 +35175,7 @@ loc_82A10770:
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r28.u32 + ctx.r11.u32);
 	// bl 0x82a12958
 	ctx.lr = 0x82A10788;
-	ReadFile(ctx, base);
+	gta4_ReadFile(ctx, base);
 	// cmpwi r3,0
 	ctx.cr0.compare<int32_t>(ctx.r3.s32, 0, ctx.xer);
 	// beq 0x82a10ad8
@@ -35305,7 +35305,7 @@ loc_82A10858:
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r28.u32 + ctx.r11.u32);
 	// bl 0x82a12958
 	ctx.lr = 0x82A10878;
-	ReadFile(ctx, base);
+	gta4_ReadFile(ctx, base);
 	// cmpwi r3,0
 	ctx.cr0.compare<int32_t>(ctx.r3.s32, 0, ctx.xer);
 	// bne 0x82a1088c
@@ -38842,7 +38842,7 @@ DEFINE_REX_FUNC(sub_82A11F50) {
 	return;
 }
 
-DEFINE_REX_FUNC(CloseHandle) {
+DEFINE_REX_FUNC(gta4_CloseHandle) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -40184,7 +40184,7 @@ DEFINE_REX_FUNC(sub_82A127A0) {
 	return;
 }
 
-DEFINE_REX_FUNC(SetFilePointer) {
+DEFINE_REX_FUNC(gta4_SetFilePointer) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -40408,7 +40408,7 @@ DEFINE_REX_FUNC(sub_82A12950) {
 	return;
 }
 
-DEFINE_REX_FUNC(ReadFile) {
+DEFINE_REX_FUNC(gta4_ReadFile) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -41715,7 +41715,7 @@ DEFINE_REX_FUNC(sub_82A131A0) {
 	return;
 }
 
-DEFINE_REX_FUNC(CreateFileA) {
+DEFINE_REX_FUNC(gta4_CreateFileA) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -42326,7 +42326,7 @@ loc_82A135A4:
 	return;
 }
 
-DEFINE_REX_FUNC(GetFileSize) {
+DEFINE_REX_FUNC(gta4_GetFileSize) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -42345,7 +42345,7 @@ DEFINE_REX_FUNC(GetFileSize) {
 	ctx.r4.s64 = ctx.r1.s64 + 80;
 	// bl 0x82a14918
 	ctx.lr = 0x82A135CC;
-	GetFileSizeEx(ctx, base);
+	gta4_GetFileSizeEx(ctx, base);
 	// cmpwi r3,0
 	ctx.cr0.compare<int32_t>(ctx.r3.s32, 0, ctx.xer);
 	// beq 0x82a13600
@@ -42390,7 +42390,7 @@ loc_82A13604:
 	return;
 }
 
-DEFINE_REX_FUNC(WriteFile) {
+DEFINE_REX_FUNC(gta4_WriteFile) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -45192,7 +45192,7 @@ loc_82A14904:
 	return;
 }
 
-DEFINE_REX_FUNC(GetFileSizeEx) {
+DEFINE_REX_FUNC(gta4_GetFileSizeEx) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -45257,7 +45257,7 @@ loc_82A14970:
 	return;
 }
 
-DEFINE_REX_FUNC(FindFirstFileA) {
+DEFINE_REX_FUNC(gta4_FindFirstFileA) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -45340,7 +45340,7 @@ loc_82A14A00:
 	return;
 }
 
-DEFINE_REX_FUNC(SetFileTime) {
+DEFINE_REX_FUNC(gta4_SetFileTime) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -45440,7 +45440,7 @@ loc_82A14AB4:
 	return;
 }
 
-DEFINE_REX_FUNC(GetFileAttributesA) {
+DEFINE_REX_FUNC(gta4_GetFileAttributesA) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -45502,7 +45502,7 @@ loc_82A14B1C:
 	return;
 }
 
-DEFINE_REX_FUNC(SetFileAttributesA) {
+DEFINE_REX_FUNC(gta4_SetFileAttributesA) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -45684,7 +45684,7 @@ loc_82A14C54:
 	return;
 }
 
-DEFINE_REX_FUNC(SetEndOfFile) {
+DEFINE_REX_FUNC(gta4_SetEndOfFile) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -45779,7 +45779,7 @@ loc_82A14CF8:
 	return;
 }
 
-DEFINE_REX_FUNC(DeleteFileA) {
+DEFINE_REX_FUNC(gta4_DeleteFileA) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -45884,7 +45884,7 @@ loc_82A14DB0:
 	return;
 }
 
-DEFINE_REX_FUNC(MoveFileA) {
+DEFINE_REX_FUNC(gta4_MoveFileA) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -46004,7 +46004,7 @@ loc_82A14E80:
 	return;
 }
 
-DEFINE_REX_FUNC(CreateDirectoryA) {
+DEFINE_REX_FUNC(gta4_CreateDirectoryA) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -49095,7 +49095,7 @@ loc_82A16410:
 	return;
 }
 
-DEFINE_REX_FUNC(RtlSizeHeap) {
+DEFINE_REX_FUNC(gta4_RtlSizeHeap) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -50972,7 +50972,7 @@ DEFINE_REX_FUNC(sub_82A17168) {
 	return;
 }
 
-DEFINE_REX_FUNC(RtlAllocateHeap) {
+DEFINE_REX_FUNC(gta4_RtlAllocateHeap) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -52230,7 +52230,7 @@ loc_82A17A40:
 	return;
 }
 
-DEFINE_REX_FUNC(RtlFreeHeap) {
+DEFINE_REX_FUNC(gta4_RtlFreeHeap) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -52672,7 +52672,7 @@ loc_82A17D28:
 	return;
 }
 
-DEFINE_REX_FUNC(RtlReAllocateHeap) {
+DEFINE_REX_FUNC(gta4_RtlReAllocateHeap) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -53593,7 +53593,7 @@ loc_82A18420:
 	ctx.r3.u64 = ctx.r27.u64;
 	// bl 0x82a17180
 	ctx.lr = 0x82A18430;
-	RtlAllocateHeap(ctx, base);
+	gta4_RtlAllocateHeap(ctx, base);
 	// mr. r29,r3
 	ctx.r29.u64 = ctx.r3.u64;
 	ctx.cr0.compare<int32_t>(ctx.r29.s32, 0, ctx.xer);
@@ -53712,7 +53712,7 @@ loc_82A184EC:
 	ctx.r3.u64 = ctx.r27.u64;
 	// bl 0x82a17a68
 	ctx.lr = 0x82A184FC;
-	RtlFreeHeap(ctx, base);
+	gta4_RtlFreeHeap(ctx, base);
 loc_82A184FC:
 	// mr r20,r29
 	ctx.r20.u64 = ctx.r29.u64;
@@ -54330,7 +54330,7 @@ loc_82A188C8:
 	return;
 }
 
-DEFINE_REX_FUNC(FlushFileBuffers) {
+DEFINE_REX_FUNC(gta4_FlushFileBuffers) {
 	REX_FUNC_PROLOGUE();
 	uint32_t ea{};
 	// mflr r12
@@ -54399,7 +54399,7 @@ DEFINE_REX_FUNC(sub_82A18920) {
 	ctx.r5.u64 = ctx.r30.u64;
 	// bl 0x82a17180
 	ctx.lr = 0x82A1894C;
-	RtlAllocateHeap(ctx, base);
+	gta4_RtlAllocateHeap(ctx, base);
 	// addi r1,r1,112
 	ctx.r1.s64 = ctx.r1.s64 + 112;
 	// lwz r12,-8(r1)
@@ -54438,7 +54438,7 @@ DEFINE_REX_FUNC(sub_82A18968) {
 	ctx.r5.u64 = ctx.r31.u64;
 	// bl 0x82a17a68
 	ctx.lr = 0x82A1898C;
-	RtlFreeHeap(ctx, base);
+	gta4_RtlFreeHeap(ctx, base);
 	// cmplwi r3,0
 	ctx.cr0.compare<uint32_t>(ctx.r3.u32, 0, ctx.xer);
 	// li r3,0

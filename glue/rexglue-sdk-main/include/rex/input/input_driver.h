@@ -32,6 +32,8 @@ class InputDriver {
 
   virtual X_STATUS Setup() = 0;
   virtual const char* trace_name() const { return "input-driver"; }
+  // Keyboard emulation and placeholder drivers must not claim pad ownership.
+  virtual bool is_physical_gamepad() const { return true; }
 
   virtual X_RESULT GetCapabilities(uint32_t user_index, uint32_t flags,
                                    X_INPUT_CAPABILITIES* out_caps) = 0;

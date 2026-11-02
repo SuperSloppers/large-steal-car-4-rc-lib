@@ -101,6 +101,7 @@ extern void KernelPhase_EnterRuntime();
 
 
 #ifdef LIBERTY_RECOMP_D3D12
+#include <plume_d3d12.h>
 #include "shader/hlsl/blend_color_alpha_ps.hlsl.dxil.h"
 #include "shader/hlsl/copy_vs.hlsl.dxil.h"
 #include "shader/hlsl/copy_color_ps.hlsl.dxil.h"
@@ -1136,6 +1137,10 @@ struct RenderCommand
         struct
         {
             GuestTexture* texture;
+            void* memory;
+            uint32_t level;
+            uint32_t arrayIndex;
+            uint32_t pitch;
         } unlockTextureRect;
 
         struct
@@ -2572,10 +2577,10 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
 
     // Initialize Upscaler system (DLSS, FSR3, XeSS, MetalFX)
     // Set the graphics device for upscalers that need native API access
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_D3D12)
     if (g_backend == Backend::D3D12) {
         // For D3D12, get the native device
-        Upscaler::SetGraphicsDevice(g_device->getNativeInterface());
+        Upscaler::SetGraphicsDevice(static_cast<plume::D3D12Device*>(g_device.get())->d3d);
     }
 #endif
     if (!Upscaler::Initialize()) {
@@ -2740,6 +2745,10 @@ static void UnlockTextureRect(GuestTexture* texture)
     RenderCommand cmd;
     cmd.type = RenderCommandType::UnlockTextureRect;
     cmd.unlockTextureRect.texture = texture;
+    cmd.unlockTextureRect.memory = texture->mappedMemory;
+    cmd.unlockTextureRect.level = 0;
+    cmd.unlockTextureRect.arrayIndex = 0;
+    cmd.unlockTextureRect.pitch = ComputeTexturePitch(texture);
     g_renderQueue.enqueue(cmd);
 }
 
@@ -2747,18 +2756,31 @@ static void ProcUnlockTextureRect(const RenderCommand& cmd)
 {
     const auto& args = cmd.unlockTextureRect;
 
+    if (args.memory == nullptr)
+        return;
+
     AddBarrier(args.texture, RenderTextureLayout::COPY_DEST);
     FlushBarriers();
 
-    uint32_t pitch = ComputeTexturePitch(args.texture);
-    uint32_t slicePitch = pitch * args.texture->height;
+    // Source rows are args.pitch apart; the upload buffer needs PITCH_ALIGNMENT rows.
+    const RenderFormat format = args.texture->format;
+    const uint32_t blockWidth = RenderFormatBlockWidth(format);
+    const uint32_t blockSize = RenderFormatSize(format);
+    const uint32_t width = std::max(1u, args.texture->width >> args.level);
+    const uint32_t height = std::max(1u, args.texture->height >> args.level);
+    const uint32_t widthInBlocks = (width + blockWidth - 1) / blockWidth;
+    const uint32_t heightInBlocks = (height + blockWidth - 1) / blockWidth;
+    const uint32_t rowBytes = widthInBlocks * blockSize;
+    const uint32_t dstPitch = (rowBytes + PITCH_ALIGNMENT - 1) & ~(PITCH_ALIGNMENT - 1);
+    const uint32_t srcPitch = args.pitch != 0 ? args.pitch : rowBytes;
 
-    auto allocation = g_uploadAllocators[g_frame].allocate(slicePitch, PLACEMENT_ALIGNMENT);
-    memcpy(allocation.memory, args.texture->mappedMemory, slicePitch);
+    auto allocation = g_uploadAllocators[g_frame].allocate(dstPitch * heightInBlocks, PLACEMENT_ALIGNMENT);
+    for (uint32_t row = 0; row < heightInBlocks; row++)
+        memcpy(allocation.memory + row * dstPitch, static_cast<const uint8_t*>(args.memory) + row * srcPitch, std::min(rowBytes, srcPitch));
 
     g_commandLists[g_frame]->copyTextureRegion(
-        RenderTextureCopyLocation::Subresource(args.texture->texture, 0),
-        RenderTextureCopyLocation::PlacedFootprint(allocation.buffer, args.texture->format, args.texture->width, args.texture->height, 1, pitch / RenderFormatSize(args.texture->format), allocation.offset));
+        RenderTextureCopyLocation::Subresource(args.texture->texture, args.level, args.arrayIndex),
+        RenderTextureCopyLocation::PlacedFootprint(allocation.buffer, format, widthInBlocks * blockWidth, heightInBlocks * blockWidth, 1, (dstPitch / blockSize) * blockWidth, allocation.offset));
 }
 
 static void* LockBuffer(GuestBuffer* buffer, uint32_t flags)
@@ -4275,6 +4297,8 @@ static void ProcStretchRect(const RenderCommand& cmd)
 
     const bool isDepthStencil = (args.flags & 0x4) != 0;
     const auto surface = isDepthStencil ? g_depthStencil : g_renderTarget;
+    if (surface == nullptr || args.texture == nullptr)
+        return;
 
     // Erase previous pending command so it doesn't cause the texture to be overriden.
     if (args.texture->sourceSurface != nullptr)
@@ -9352,7 +9376,7 @@ GUEST_FUNCTION_HOOK(sub_82A50F28, GpuMemAllocStub);
 // =============================================================================
 // ENABLED — resource creation hooks allocate proper Guest* objects and register
 // them in the resource registry so binding hooks can validate pointers.
-static GuestBuffer* GTAIV_CreateVertexBuffer(uint32_t device, uint32_t length, uint32_t usage, uint32_t pool, uint32_t unknown)
+[[maybe_unused]] static GuestBuffer* GTAIV_CreateVertexBuffer(uint32_t device, uint32_t length, uint32_t usage, uint32_t pool, uint32_t unknown)
 {
     static int createCount = 0;
     ++createCount;
@@ -9378,14 +9402,17 @@ static GuestBuffer* GTAIV_CreateVertexBuffer(uint32_t device, uint32_t length, u
     return buffer;
 }
 
-static GuestTexture* GTAIV_CreateTexture(uint32_t device, uint32_t width, uint32_t height, uint32_t levels, uint32_t usage, uint32_t format, uint32_t pool)
+// D3DDevice_CreateTexture(width, height, depth, levels, usage, format, pool, type)
+// type: 3 = 2D, 17 = volume, 18 = cube (verified at the sub_828BEC78 call sites).
+// Volume/cube are created as 2D for now.
+static GuestTexture* GTAIV_CreateTexture(uint32_t width, uint32_t height, uint32_t depth, uint32_t levels, uint32_t usage, uint32_t format, uint32_t pool, uint32_t type)
 {
     static int createCount = 0;
     ++createCount;
 
     if (createCount <= 20 || createCount % 100 == 0) {
-        LOGF_WARNING("GTAIV_CreateTexture #{} - {}x{} levels={} format={:#x}",
-                     createCount, width, height, levels, format);
+        LOGF_WARNING("GTAIV_CreateTexture #{} - {}x{}x{} levels={} format={:#x} type={}",
+                     createCount, width, height, depth, levels, format, type);
     }
 
     auto texture = g_userHeap.AllocPhysical<GuestTexture>(ResourceType::Texture);
@@ -9412,6 +9439,7 @@ static GuestTexture* GTAIV_CreateTexture(uint32_t device, uint32_t width, uint32
     texture->depth = 1;
     texture->mipLevels = desc.mipLevels;
     texture->format = desc.format;
+    texture->guestFormat = format;
 
     RenderTextureViewDesc viewDesc;
     viewDesc.dimension = RenderTextureViewDimension::TEXTURE_2D;
@@ -9429,8 +9457,189 @@ static GuestTexture* GTAIV_CreateTexture(uint32_t device, uint32_t width, uint32
     return texture;
 }
 
-GUEST_FUNCTION_HOOK(sub_82A44970, GTAIV_CreateVertexBuffer);
+// sub_82A44970 is D3DDevice_CreateSurface(width, height, format, multiSample, params):
+// it allocates a 48-byte D3DSurface and fills it via sub_82A445B0. It was previously
+// mis-hooked as CreateVertexBuffer, handing RAGE render targets a GuestBuffer.
+GUEST_FUNCTION_HOOK(sub_82A44970, CreateSurface);
 GUEST_FUNCTION_HOOK(sub_82A44850, GTAIV_CreateTexture);
+
+// =============================================================================
+// GTA IV guest D3D texture lock path for host-backed textures.
+// Textures from GTAIV_CreateTexture are host RHI objects with no Xenos header,
+// so the guest's own lock/desc/unlock (which decode the fetch constant) yield
+// garbage pointers. rage::grcImage upload (sub_828D9AC8) does:
+//   XGGetTextureDesc  sub_82A57088 -> sub_82A56C70(tex, level, XGTEXTURE_DESC*)
+//   LockRect          sub_82A44820/sub_82A44838 -> sub_82A44168(tex, face, level, D3DLOCKED_RECT*, rect, flags)
+//   memcpy (linear) or XGTileTextureLevel (format & 0x100 = tiled)
+//   Unlock/flush      sub_82A42E88(tex, level)
+// Registered host textures are staged in linear per-mip memory and uploaded on
+// unlock; anything else falls through to the original code.
+// =============================================================================
+extern "C" void __imp__sub_82A44168(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_82A56C70(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__sub_82A42E88(PPCContext& ctx, uint8_t* base);
+extern "C" void __imp__D3DBaseTexture_GetLevelCount(PPCContext& ctx, uint8_t* base);
+
+struct GTAIV_LevelLayout
+{
+    uint32_t width, height, widthInBlocks, heightInBlocks, blockSize, pitch, size;
+};
+
+static GTAIV_LevelLayout GTAIV_GetLevelLayout(GuestTexture* texture, uint32_t level)
+{
+    GTAIV_LevelLayout l;
+    const uint32_t blockWidth = RenderFormatBlockWidth(texture->format);
+    l.width = std::max(1u, texture->width >> level);
+    l.height = std::max(1u, texture->height >> level);
+    l.widthInBlocks = (l.width + blockWidth - 1) / blockWidth;
+    l.heightInBlocks = (l.height + blockWidth - 1) / blockWidth;
+    l.blockSize = RenderFormatSize(texture->format);
+    l.pitch = l.widthInBlocks * l.blockSize;
+    l.size = l.pitch * l.heightInBlocks;
+    return l;
+}
+
+static bool GTAIV_IsCube(const GuestTexture* texture)
+{
+    return texture->viewDimension == RenderTextureViewDimension::TEXTURE_CUBE;
+}
+
+static GuestTexture* GTAIV_LookupHostTexture(uint32_t guestAddr, uint32_t level)
+{
+    GuestTexture* texture = GTAIV::LookupTexture(guestAddr);
+    if (texture == nullptr || texture->texture == nullptr || level >= texture->mipLevels)
+        return nullptr;
+    return texture;
+}
+
+PPC_FUNC_HOOK(D3DBaseTexture_GetLevelCount)
+{
+    GuestTexture* texture = GTAIV_LookupHostTexture(ctx.r3.u32, 0);
+    if (texture == nullptr)
+    {
+        __imp__D3DBaseTexture_GetLevelCount(ctx, base);
+        return;
+    }
+    ctx.r3.u64 = texture->mipLevels;
+}
+
+PPC_FUNC_HOOK(sub_82A44168)
+{
+    const uint32_t level = ctx.r5.u32;
+    GuestTexture* texture = GTAIV_LookupHostTexture(ctx.r3.u32, level);
+    static int s_lockCount = 0;
+    if (++s_lockCount <= 20)
+        LOGF_WARNING("[TexLock] #{} tex={:#x} face={} level={} out={:#x} host={}", s_lockCount, ctx.r3.u32, ctx.r4.u32, level, ctx.r6.u32, (void*)texture);
+    if (texture == nullptr)
+    {
+        const uint32_t tex = ctx.r3.u32, out = ctx.r6.u32;
+        if (s_lockCount <= 20)
+        {
+            std::string hdr;
+            for (uint32_t i = 0; i < 52; i += 4)
+                hdr += fmt::format("{:08x} ", PPC_LOAD_U32(tex + i));
+            LOGF_WARNING("[TexLock]   hdr: {}", hdr);
+            // In sub_828D9AC8, r25 = grcImage level; memcpy(bits, 16(r25), 2(r25)*12(r25)*14(r25))
+            const uint32_t img = ctx.r25.u32;
+            if (img != 0)
+                LOGF_WARNING("[TexLock]   caller img={:#x} w={} h={} bpp/stride={} {} src={:#x}", img,
+                    PPC_LOAD_U16(img + 0), PPC_LOAD_U16(img + 2), PPC_LOAD_U16(img + 12), PPC_LOAD_U16(img + 14), PPC_LOAD_U32(img + 16));
+        }
+        __imp__sub_82A44168(ctx, base);
+        if (s_lockCount <= 20)
+            LOGF_WARNING("[TexLock]   guest lock -> pitch={:#x} bits={:#x}", PPC_LOAD_U32(out), PPC_LOAD_U32(out + 4));
+        return;
+    }
+
+    const uint32_t face = GTAIV_IsCube(texture) ? std::min(ctx.r4.u32, 5u) : 0;
+    const uint32_t slot = face * texture->mipLevels + level;
+    const auto layout = GTAIV_GetLevelLayout(texture, level);
+    if (texture->levelMemory.size() <= slot)
+        texture->levelMemory.resize(texture->mipLevels * (GTAIV_IsCube(texture) ? 6 : 1), nullptr);
+    if (texture->levelMemory[slot] == nullptr)
+    {
+        // Pad generously: callers memcpy sizes derived from their own image headers.
+        texture->levelMemory[slot] = g_userHeap.AllocPhysical(((layout.size + 0xFFF) & ~0xFFFu) + 0x1000, 0x1000);
+        memset(texture->levelMemory[slot], 0, layout.size);
+    }
+
+    uint32_t bits = g_memory.MapVirtual(texture->levelMemory[slot]);
+    const uint32_t rectAddr = ctx.r7.u32;
+    if (rectAddr != 0)
+    {
+        // RECT { left, top, right, bottom }
+        const uint32_t blockWidth = RenderFormatBlockWidth(texture->format);
+        const uint32_t left = PPC_LOAD_U32(rectAddr + 0);
+        const uint32_t top = PPC_LOAD_U32(rectAddr + 4);
+        bits += (top / blockWidth) * layout.pitch + (left / blockWidth) * layout.blockSize;
+    }
+
+    const uint32_t lockedRect = ctx.r6.u32;
+    PPC_STORE_U32(lockedRect + 0, layout.pitch);
+    PPC_STORE_U32(lockedRect + 4, bits);
+    ctx.r3.u64 = 0;
+}
+
+PPC_FUNC_HOOK(sub_82A56C70)
+{
+    const uint32_t level = ctx.r4.u32;
+    GuestTexture* texture = GTAIV_LookupHostTexture(ctx.r3.u32, level);
+    static int s_descCount = 0;
+    if (++s_descCount <= 20)
+        LOGF_WARNING("[TexDesc] #{} tex={:#x} level={} host={}", s_descCount, ctx.r3.u32, level, (void*)texture);
+    if (texture == nullptr)
+    {
+        __imp__sub_82A56C70(ctx, base);
+        return;
+    }
+
+    const auto layout = GTAIV_GetLevelLayout(texture, level);
+    const uint32_t blockWidth = RenderFormatBlockWidth(texture->format);
+    const uint32_t desc = ctx.r5.u32;
+    // XGTEXTURE_DESC. Report the format untiled so callers memcpy linear data.
+    PPC_STORE_U32(desc + 0, 3);                                   // ResourceType = D3DRTYPE_TEXTURE
+    PPC_STORE_U32(desc + 4, layout.width);
+    PPC_STORE_U32(desc + 8, layout.height);
+    PPC_STORE_U32(desc + 12, 1);                                  // Depth
+    PPC_STORE_U32(desc + 16, texture->guestFormat & ~0x100u);     // Format
+    PPC_STORE_U32(desc + 20, layout.pitch);                       // RowPitch
+    PPC_STORE_U32(desc + 24, layout.size);                        // SlicePitch
+    PPC_STORE_U32(desc + 28, layout.blockSize * 8 / (blockWidth * blockWidth)); // BitsPerPixel
+    PPC_STORE_U32(desc + 32, layout.widthInBlocks);
+    PPC_STORE_U32(desc + 36, layout.heightInBlocks);
+    PPC_STORE_U32(desc + 40, 1);                                  // DepthInBlocks
+    PPC_STORE_U32(desc + 44, layout.blockSize);                   // BytesPerBlock
+    PPC_STORE_U32(desc + 48, 0);                                  // ExpBias
+    PPC_STORE_U32(desc + 52, 0);                                  // Flags
+    PPC_STORE_U32(desc + 56, 0);                                  // MultiSampleType
+}
+
+PPC_FUNC_HOOK(sub_82A42E88)
+{
+    // Called as (tex, level), or (tex, face, level) for cube textures.
+    GuestTexture* texture = GTAIV_LookupHostTexture(ctx.r3.u32, 0);
+    if (texture == nullptr)
+    {
+        __imp__sub_82A42E88(ctx, base);
+        return;
+    }
+
+    const bool cube = GTAIV_IsCube(texture);
+    const uint32_t face = cube ? std::min(ctx.r4.u32, 5u) : 0;
+    const uint32_t level = cube ? ctx.r5.u32 : ctx.r4.u32;
+    const uint32_t slot = face * texture->mipLevels + level;
+    if (level < texture->mipLevels && slot < texture->levelMemory.size() && texture->levelMemory[slot] != nullptr)
+    {
+        RenderCommand cmd;
+        cmd.type = RenderCommandType::UnlockTextureRect;
+        cmd.unlockTextureRect.texture = texture;
+        cmd.unlockTextureRect.memory = texture->levelMemory[slot];
+        cmd.unlockTextureRect.level = level;
+        cmd.unlockTextureRect.arrayIndex = face;
+        cmd.unlockTextureRect.pitch = GTAIV_GetLevelLayout(texture, level).pitch;
+        g_renderQueue.enqueue(cmd);
+    }
+}
 
 // =============================================================================
 // RAGE CreateRenderTarget hook — sub_828BEC78
@@ -9441,14 +9650,19 @@ GUEST_FUNCTION_HOOK(sub_82A44850, GTAIV_CreateTexture);
 // and create proper host-side GuestSurface / GuestTexture objects instead,
 // exactly like the UnleashedRecomp model.
 //
-// Register layout confirmed from all 5 callers (stw rX,84(r1) before bl):
-//   r3  = device context (unused by us)
-//   r4  = width
-//   r6  = height
-//   r8  = Xbox D3DFMT constant  (matches our GuestFormat enum values)
-//   r9  = MSAA count (0 = none)
-//   r10 = type: 1 = 2D texture, 3 = cube texture, else = render surface
-//   sp+84 (caller frame) = output pointer where handle is written
+// Register layout (verified against all 5 callers in gta4_recomp.66.cpp and the
+// body of sub_828BEC78, which feeds these straight into XGSet*TextureHeader):
+//   r3  = width
+//   r4  = height
+//   r5  = depth (volume textures)
+//   r6  = mip levels
+//   r7  = usage
+//   r8  = Xbox D3DFMT constant (matches our GuestFormat enum values)
+//   r9  = flags (unused by us)
+//   r10 = type: 0 = 2D texture, 1 = cube, 3 = volume (grcImage type byte)
+//   sp+84 (caller frame) = output pointer where the texture handle is written
+// All callers are grcTexture creation paths (grcImage upload, blank/dynamic
+// textures), so every type gets a host GuestTexture.
 //
 // Return: 0 = success, <0 = failure (caller branches on this).
 
@@ -9457,88 +9671,64 @@ PPC_FUNC_HOOK(sub_828BEC78)
     static int s_count = 0;
     ++s_count;
 
-    const uint32_t width   = ctx.r4.u32;
-    const uint32_t height  = ctx.r6.u32;
+    const uint32_t width   = std::max(1u, ctx.r3.u32);
+    const uint32_t height  = std::max(1u, ctx.r4.u32);
+    const uint32_t depth   = std::max(1u, ctx.r5.u32);
+    const uint32_t levels  = ctx.r6.u32;
+    const uint32_t usage   = ctx.r7.u32;
     const uint32_t fmtCode = ctx.r8.u32;   // Xbox D3DFMT constant
-    const uint32_t msaa    = ctx.r9.u32;
-    const uint32_t type    = ctx.r10.u32;  // 1=texture2D, 3=cube, else=surface
-    // All callers store the output ptr at sp+84 just before the call.
+    const uint32_t type    = ctx.r10.u32;  // 0=2D, 1=cube, 3=volume
     // In PPC_FUNC_HOOK ctx.r1.u32 is the caller's sp (before callee prologue).
     const uint32_t outPtr  = PPC_LOAD_U32(ctx.r1.u32 + 84);
 
+    uint32_t maxLevels = 1;
+    for (uint32_t d = std::max({ width, height, type == 3 ? depth : 1u }); d > 1; d >>= 1)
+        ++maxLevels;
+    const uint32_t mipLevels = (levels == 0 || levels > maxLevels) ? maxLevels : levels;
+
     if (s_count <= 20 || (s_count % 200) == 0)
-        LOGF_WARNING("[CreateRAGERT] #{} {}x{} fmt={:#x} type={} msaa={} out={:#x}",
-                     s_count, std::max(1u, width), std::max(1u, height),
-                     fmtCode, type, msaa, outPtr);
+        LOGF_WARNING("[CreateRAGERT] #{} {}x{}x{} levels={} usage={} fmt={:#x} type={} out={:#x}",
+                     s_count, width, height, depth, mipLevels, usage, fmtCode, type, outPtr);
 
-    if (type == 1 || type == 3) {
-        // Render-target texture (2D or cube) — create via existing CreateTexture path
-        const ResourceType resType = ResourceType::Texture;
-        const auto texture = g_userHeap.AllocPhysical<GuestTexture>(resType);
-        if (!texture) { ctx.r3.s32 = -1; return; }
+    const auto texture = g_userHeap.AllocPhysical<GuestTexture>(ResourceType::Texture);
+    if (!texture) { ctx.r3.s32 = -1; return; }
 
-        RenderTextureDesc desc{};
-        desc.dimension  = RenderTextureDimension::TEXTURE_2D;  // cube uses TEXTURE_2D + arraySize=6
-        desc.width      = std::max(1u, width);
-        desc.height     = std::max(1u, height);
-        desc.depth      = 1;
-        desc.mipLevels  = 1;
-        desc.arraySize  = (type == 3) ? 6 : 1;
-        desc.multisampling.sampleCount = RenderSampleCount::COUNT_1;
-        desc.format     = ConvertFormat(fmtCode);
-        desc.flags      = RenderTextureFlag::NONE;
+    RenderTextureDesc desc{};
+    desc.dimension  = (type == 3) ? RenderTextureDimension::TEXTURE_3D : RenderTextureDimension::TEXTURE_2D;
+    desc.width      = width;
+    desc.height     = height;
+    desc.depth      = (type == 3) ? depth : 1;
+    desc.mipLevels  = mipLevels;
+    desc.arraySize  = (type == 1) ? 6 : 1;
+    desc.multisampling.sampleCount = RenderSampleCount::COUNT_1;
+    desc.format     = ConvertFormat(fmtCode != 0 ? fmtCode : 0x1A200186u);
+    desc.flags      = (type == 1) ? RenderTextureFlag::CUBE : RenderTextureFlag::NONE;
 
-        texture->textureHolder = g_device->createTexture(desc);
-        texture->texture       = texture->textureHolder.get();
-        texture->width         = desc.width;
-        texture->height        = desc.height;
-        texture->depth         = 1;
-        texture->mipLevels     = 1;
-        texture->format        = desc.format;
+    texture->textureHolder = g_device->createTexture(desc);
+    texture->texture       = texture->textureHolder.get();
+    texture->width         = desc.width;
+    texture->height        = desc.height;
+    texture->depth         = desc.depth;
+    texture->mipLevels     = mipLevels;
+    texture->format        = desc.format;
+    texture->guestFormat   = fmtCode;
 
-        RenderTextureViewDesc vd{};
-        vd.dimension  = (type == 3) ? RenderTextureViewDimension::TEXTURE_CUBE
-                                    : RenderTextureViewDimension::TEXTURE_2D;
-        vd.format     = desc.format;
-        vd.mipLevels  = 1;
-        texture->textureView     = texture->texture->createTextureView(vd);
-        texture->viewDimension   = vd.dimension;
-        texture->descriptorIndex = g_textureDescriptorAllocator.allocate();
-        g_textureDescriptorSet->setTexture(texture->descriptorIndex, texture->texture,
-            RenderTextureLayout::SHADER_READ, texture->textureView.get());
+    RenderTextureViewDesc vd{};
+    vd.dimension  = (type == 1) ? RenderTextureViewDimension::TEXTURE_CUBE
+                  : (type == 3) ? RenderTextureViewDimension::TEXTURE_3D
+                                : RenderTextureViewDimension::TEXTURE_2D;
+    vd.format     = desc.format;
+    vd.mipLevels  = mipLevels;
+    texture->textureView     = texture->texture->createTextureView(vd);
+    texture->viewDimension   = vd.dimension;
+    texture->descriptorIndex = g_textureDescriptorAllocator.allocate();
+    g_textureDescriptorSet->setTexture(texture->descriptorIndex, texture->texture,
+        RenderTextureLayout::SHADER_READ, texture->textureView.get());
 
-        const uint32_t handle = g_memory.MapVirtual(texture);
-        GTAIV::RegisterTexture(handle, texture);
-        if (outPtr) PPC_STORE_U32(outPtr, handle);
-        ctx.r3.s32 = 0;
-    } else {
-        // Render target or depth/stencil surface — reuse existing CreateSurface.
-        // Compressed formats (DXT1/BC1, DXT4/BC3, DXT5/BC4/BC5) cannot be
-        // multisampled — Metal/Vulkan will assert/crash if MSAA > 1 is requested.
-        // Also treat fmt=0 as RGBA8 (1x1 placeholder surface).
-        static auto IsCompressedFmt = [](uint32_t fmt) {
-            switch (fmt) {
-            case 0x1A200152: // D3DFMT_DXT1
-            case 0x1A200154: // D3DFMT_DXT4/5
-            case 0x1A200155: // DXT5
-            case 0x1A20AB52: // DXT1 sRGB variant
-            case 0x1A20AB54: // DXT4/5 sRGB variant
-                return true;
-            default: return false;
-            }
-        };
-        const uint32_t safeFmt  = (fmtCode == 0) ? 0x1A200186u : fmtCode; // 0→RGBA8
-        const uint32_t safeMsaa = (IsCompressedFmt(safeFmt)) ? 0u : (msaa > 0 ? 1u : 0u);
-        GuestSurface* surface = CreateSurface(
-            std::max(1u, width), std::max(1u, height),
-            safeFmt, safeMsaa, nullptr);
-        if (!surface) { ctx.r3.s32 = -1; return; }
-
-        const uint32_t handle = g_memory.MapVirtual(surface);
-        // CreateSurface already called RegisterSurface; nothing else needed.
-        if (outPtr) PPC_STORE_U32(outPtr, handle);
-        ctx.r3.s32 = 0;
-    }
+    const uint32_t handle = g_memory.MapVirtual(texture);
+    GTAIV::RegisterTexture(handle, texture);
+    if (outPtr) PPC_STORE_U32(outPtr, handle);
+    ctx.r3.s32 = 0;
 }
 
 
@@ -9910,6 +10100,26 @@ PPC_FUNC_HOOK(sub_82A46578)
 // Hardware serialization boundary. Native mode preserves CPU-visible state in
 // dedicated high-level hooks and never initializes or advances a Xenos ring.
 // =============================================================================
+
+// sub_82A3EDA8 — D3DDevice_Resolve(device, flags, pSrcRect, pDestTexture, pDestPoint,
+//                 destLevel, destSliceOrFace, pClearColor, f1 = clearZ, ...).
+// The generated body serializes resolve/clear PM4 into the secondary ring
+// (device+13232 -> sub_82A49458), which native mode never initializes (its
+// device back-pointer is null -> AV at 0x2ABD). Route resolves into a known host
+// texture to StretchRect, and drop the hardware serialization otherwise.
+PPC_FUNC_HOOK(sub_82A3EDA8)
+{
+    static int s_count = 0;
+    ++s_count;
+    const uint32_t flags = ctx.r4.u32;
+    const uint32_t destAddr = ctx.r6.u32;
+    GuestTexture* dest = destAddr ? GTAIV::LookupTexture(destAddr) : nullptr;
+    if (s_count <= 20 || (s_count % 1000) == 0)
+        LOGF_WARNING("[Resolve] #{} flags={:#x} dest={:#x} host={} level={} slice={} clearColor={:#x} clearZ={}",
+                     s_count, flags, destAddr, (void*)dest, ctx.r8.u32, ctx.r9.u32, ctx.r10.u32, ctx.f1.f64);
+    if (dest != nullptr)
+        StretchRect(nullptr, flags, 0, dest, 0, 0, ctx.r9.u32);
+}
 
 // sub_82A49CB0 — PM4 resolve draw packet writer (no-op)
 PPC_FUNC_HOOK(sub_82A49CB0) { }
@@ -10453,6 +10663,7 @@ static void RetireNativeBoundResource(uint32_t deviceAddr, uint32_t resourceAddr
     if (resourceAddr == 0)
         return;
 
+    uint8_t* base = g_memory.base;
     const uint32_t liveFence = PPC_LOAD_U32(deviceAddr + kLiveResourceFenceOffset);
     if (liveFence != 0)
         PPC_STORE_U32(resourceAddr + kResourceFenceOffset, liveFence);

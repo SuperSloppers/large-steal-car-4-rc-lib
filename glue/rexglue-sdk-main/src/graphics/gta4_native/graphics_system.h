@@ -2,7 +2,10 @@
 
 #include "native_triangle_fan.h"
 #include "native_owned_commands.h"
+#include "native_frame_packet.h"
+#include "native_frame_state.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <atomic>
@@ -108,6 +111,33 @@ class VulkanSubmissionTracker;
 }  // namespace rex::ui
 
 namespace rex::graphics::gta4_native {
+
+// Title command bytes. Draws and most state commands (<=192 bytes) stay inline,
+// saving one heap allocation and free per command. capacity() is heap bytes only.
+class NativeCommandBytes {
+ public:
+  static constexpr size_t kInlineSize = 192;
+  uint8_t* data() { return size_ > kInlineSize ? heap_.data() : inline_.data(); }
+  const uint8_t* data() const { return size_ > kInlineSize ? heap_.data() : inline_.data(); }
+  size_t size() const { return size_; }
+  bool empty() const { return !size_; }
+  const uint8_t* begin() const { return data(); }
+  const uint8_t* end() const { return data() + size_; }
+  size_t capacity() const { return heap_.capacity(); }
+  void resize(size_t size) {
+    if (size > kInlineSize) {
+      if (size_ <= kInlineSize) heap_.assign(inline_.begin(), inline_.begin() + size_);
+      heap_.resize(size);
+    } else if (size_ > kInlineSize) {
+      std::copy_n(heap_.begin(), size, inline_.begin());
+    }
+    size_ = size;
+  }
+ private:
+  alignas(16) std::array<uint8_t, kInlineSize> inline_{};
+  std::vector<uint8_t> heap_;
+  size_t size_ = 0;
+};
 
 class NativeTextureUploadBatch;
 class NativeGpuScopeSummary;
@@ -413,11 +443,12 @@ class Gta4NativeGraphicsSystem final : public system::IGraphicsSystem {
     std::shared_ptr<PhoneTraceContext> phone_trace;
     std::shared_ptr<TvTraceContext> tv_trace;
     CommandType type = CommandType::kPresent;
+    size_t reflection_retired_aliases = 0;
     LightingContext lighting{};
     uint32_t light_trace_id = 0;
     uint32_t light_trace_technique = 0xFFFFFFFFu;
     uint32_t light_trace_mode = 0;
-    std::vector<uint8_t> bytes;
+    NativeCommandBytes bytes;
     std::vector<uint8_t> payload;
     NativeDeviceSnapshot device_snapshot;
     NativeShaderConstantDelta shader_constant_delta;
@@ -1288,6 +1319,7 @@ class Gta4NativeGraphicsSystem final : public system::IGraphicsSystem {
   void StartRenderWorker();
   void RenderWorkerMain();
   void BeginModernShaderFrame();
+  void BeginRecordingGuestFrame(const NativeFrameSettings& settings);
   void TraceModernShaderDraw(const NativeCommand& command, const NativeRenderingTarget& target);
   void TraceModernShaderFailure(const NativeCommand& command, std::string_view point, std::string_view reason);
   void ApplyStateCommand(const NativeCommand& command);
@@ -1471,8 +1503,11 @@ class Gta4NativeGraphicsSystem final : public system::IGraphicsSystem {
     VisitNativeCommandTextureGenerations(command, visit);
   }
   void QueueTextureProtection(const NativeCommand& command, bool retain);
+  void ProtectAssembledCommand(const NativeCommand& command);
+  void AppendAssemblyTextureProtection(std::unordered_set<uint64_t>& generations) const;
   void AppendQueuedTextureProtection(std::unordered_set<uint64_t>& generations) const;
   void ClearNativeFrameCommands();
+  void CommandReaperMain();
   static void AddProtectedTextureGenerations(const NativeCommand& command,
                                              std::unordered_set<uint64_t>& generations);
   std::unordered_set<uint64_t> CollectProtectedTextureGenerations(
@@ -1487,6 +1522,8 @@ class Gta4NativeGraphicsSystem final : public system::IGraphicsSystem {
   void DestroyNativeSurfaceImage(NativeSurfaceImage& image);
   void ReleasePendingSurfaceImages();
   void QueueSurfaceImageRelease(uint32_t handle);
+  void RecordReflectionRegistration(const NativeCommand& command);
+  void RecordResourceRelease(const NativeCommand& command);
   NativeTextureImage* GetOrCreateTextureImage(
       VkCommandBuffer command_buffer, const std::shared_ptr<const NativeTextureResource>& texture,
       NativeTextureUploadBatch* upload_batch = nullptr);
@@ -1669,6 +1706,7 @@ class Gta4NativeGraphicsSystem final : public system::IGraphicsSystem {
   NativeOwnedCommands<NativeCommand> worker_command_batch_;
   size_t worker_command_cursor_ = 0;
   void AppendWorkerTextureProtection(std::unordered_set<uint64_t>& generations) const;
+  NativeWorkerTextureProtection worker_texture_protection_; // render_mutex_ owns this.
   NativeTextureProtectionIndex queued_texture_protection_; // render_mutex_ owns this.
   uint32_t queued_title_presents_ = 0;
   bool producer_waiting_ = false;
@@ -1676,6 +1714,13 @@ class Gta4NativeGraphicsSystem final : public system::IGraphicsSystem {
   uint32_t diagnostic_producer_epoch_ = 1;
   std::atomic<bool> render_worker_running_{false};
   std::thread render_worker_;
+  // Retired frame commands are destroyed here, off the render worker. Command
+  // resources already tolerate their last reference dropping on any thread.
+  std::thread command_reaper_;
+  std::mutex command_reaper_mutex_;
+  std::condition_variable command_reaper_condition_;
+  NativeOwnedCommands<NativeCommand> command_reaper_pending_;
+  bool command_reaper_running_ = false;
   // Authoritative render-worker state. State commands mutate this object in
   // place; immutable snapshots are created only for commands that are retained
   // for later frame recording.
@@ -1686,9 +1731,9 @@ class Gta4NativeGraphicsSystem final : public system::IGraphicsSystem {
   std::shared_ptr<const NativeShaderState> last_shader_snapshot_;
   std::shared_ptr<const NativePipelineState> SnapshotPipeline(const NativeCommand&, bool);
   NativeOwnedCommands<NativeCommand> current_frame_;
+  NativeFramePacket<NativeCommand, NativeFrameState> recording_frame_;
   NativeFrameResources recording_resources_;
-  std::unordered_set<uint64_t> frame_texture_protection_;
-  const NativeCommand* active_worker_command_ = nullptr;
+  std::unordered_set<uint64_t> frame_texture_protection_; // Published under render_mutex_.
   NativeLightingLineageLedger semantic_light_setup_lineage_;
   std::unordered_map<uint32_t, EnvironmentalDataV2> environmental_data_by_device_;
   std::unordered_map<uint32_t, uint64_t> environmental_data_hash_by_device_;
@@ -1720,6 +1765,9 @@ class Gta4NativeGraphicsSystem final : public system::IGraphicsSystem {
   bool shader_cache_initialized_ = false;
   ShaderOverrideMode shader_override_mode_ = ShaderOverrideMode::kPair;
   ModernShaderFramePolicy modern_shader_frame_;
+  NativeFrameSettings assembled_frame_settings_;
+  NativeFrameSettings recording_settings_;
+  uint64_t guest_frame_serial_ = 0;
   uint32_t producer_postfx_half_scene_ = 0;
   PostFxScheduler postfx_scheduler_;
   std::shared_ptr<const NativeTextureResource> postfx_filtered_scene_;
@@ -1947,6 +1995,7 @@ class Gta4NativeGraphicsSystem final : public system::IGraphicsSystem {
   NativeGpuProfileState native_gpu_profile_state_;
   profile::CpuRecorder native_cpu_recorder_;
   profile::TransportSummary native_profile_transport_;
+  NativeRecorderTransport native_recorder_transport_;
   uint64_t native_profile_clock_probe_ticks_ = UINT64_MAX;
   struct NativeMemoryProfileState {
     bool active = false;
@@ -2205,7 +2254,9 @@ class Gta4NativeGraphicsSystem final : public system::IGraphicsSystem {
       native_placement_owners_;
   uint64_t next_surface_write_serial_ = 1;
   uint64_t next_reflection_capture_epoch_ = 1;
-  NativeReflectionRegistry reflection_resources_;
+  NativeReflectionState assembled_reflection_resources_;
+  std::shared_ptr<const NativeReflectionRegistry> reflection_resources_ =
+      assembled_reflection_resources_.Snapshot();
   uint32_t native_descriptor_capacity_ = 0;
   uint32_t native_sampler_descriptor_capacity_ = 0;
   bool null_images_initialized_ = false;

@@ -73,7 +73,7 @@ void Memory::InitializeFromRexGlue()
     PopulateFunctionTableAndVtables();
 
     DIAG_EMIT("[DIAG] Post-Populate GetFunction(0x82A692C8)=%p\n",
-              (void*)rex_memory_->GetFunction(0x82A692C8));
+              (void*)FindFunction(0x82A692C8));
 }
 
 void Memory::PopulateFunctionTableAndVtables()

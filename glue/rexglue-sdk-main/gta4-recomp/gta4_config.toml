@@ -142,34 +142,34 @@ memmove = 0x82A02230              # 40 xrefs — native rexcrt_memmove in memory
 "0x829FFAD0" = { name = "strstr" }
 
 # Heap CRT function boundaries
-"0x82A17180" = { name = "RtlAllocateHeap" }
+"0x82A17180" = { name = "gta4_RtlAllocateHeap" }
 "0x82A17A14" = {}
-"0x82A17A68" = { name = "RtlFreeHeap" }
+"0x82A17A68" = { name = "gta4_RtlFreeHeap" }
 "0x82A17CFC" = {}
-"0x82A16418" = { name = "RtlSizeHeap" }
-"0x82A17D50" = { name = "RtlReAllocateHeap" }
+"0x82A16418" = { name = "gta4_RtlSizeHeap" }
+"0x82A17D50" = { name = "gta4_RtlReAllocateHeap" }
 "0x82A1858C" = {}
 
 # File CRT function boundaries
-"0x82A131B0" = { name = "CreateFileA" }
-"0x82A12958" = { name = "ReadFile" }
-"0x82A13618" = { name = "WriteFile" }
-"0x82A11F68" = { name = "CloseHandle" }
-"0x82A127E0" = { name = "SetFilePointer" }
-"0x82A14918" = { name = "GetFileSizeEx" }
+"0x82A131B0" = { name = "gta4_CreateFileA" }
+"0x82A12958" = { name = "gta4_ReadFile" }
+"0x82A13618" = { name = "gta4_WriteFile" }
+"0x82A11F68" = { name = "gta4_CloseHandle" }
+"0x82A127E0" = { name = "gta4_SetFilePointer" }
+"0x82A14918" = { name = "gta4_GetFileSizeEx" }
 "0x82A125D0" = {}   # XFileSectorInformation helper; not GetFileSize
-"0x82A135B0" = { name = "GetFileSize" }
-"0x82A14C68" = { name = "SetEndOfFile" }
-"0x82A14D10" = { name = "DeleteFileA" }
-"0x82A14DC8" = { name = "MoveFileA" }
-"0x82A14B30" = { name = "SetFileAttributesA" }
-"0x82A14AC8" = { name = "GetFileAttributesA" }
-"0x82A14A18" = { name = "SetFileTime" }
-"0x82A14988" = { name = "FindFirstFileA" }  # was 0x82A19F88 (NT-level, wrong)
+"0x82A135B0" = { name = "gta4_GetFileSize" }
+"0x82A14C68" = { name = "gta4_SetEndOfFile" }
+"0x82A14D10" = { name = "gta4_DeleteFileA" }
+"0x82A14DC8" = { name = "gta4_MoveFileA" }
+"0x82A14B30" = { name = "gta4_SetFileAttributesA" }
+"0x82A14AC8" = { name = "gta4_GetFileAttributesA" }
+"0x82A14A18" = { name = "gta4_SetFileTime" }
+"0x82A14988" = { name = "gta4_FindFirstFileA" }  # was 0x82A19F88 (NT-level, wrong)
 "0x82A14C10" = {}
 "0x82A1A100" = {}
-"0x82A188E0" = { name = "FlushFileBuffers" }
-"0x82A14E98" = { name = "CreateDirectoryA" }
+"0x82A188E0" = { name = "gta4_FlushFileBuffers" }
+"0x82A14E98" = { name = "gta4_CreateDirectoryA" }
 "0x82A14F28" = {}
 "0x82A1A160" = {}
 
@@ -193,7 +193,7 @@ memmove = 0x82A02230              # 40 xrefs — native rexcrt_memmove in memory
 # macOS <stdlib.h>/<malloc.h>. Prefix with ppc_ to avoid redeclaration errors.
 "0x829FFB50" = { name = "ppc_srand" }          #   3 xrefs
 "0x82A00B48" = { name = "ppc_atol" }           #  82 xrefs
-"0x82A03EB8" = { name = "ppc_free" }           #  26 xrefs — thin GetProcessHeap() → RtlFreeHeap wrapper
+"0x82A03EB8" = { name = "ppc_free" }           #  26 xrefs — thin GetProcessHeap() → gta4_RtlFreeHeap wrapper
 "0x82A04338" = { name = "ppc_calloc" }         #   7 xrefs
 "0x82A043A0" = { name = "ppc_realloc" }        #   3 xrefs
 "0x82A10F48" = { name = "XMemFree" }           #   1 xref

@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <unordered_map>
 
 #include <rex/graphics/gta4_native/title_commands.h>
@@ -107,6 +108,35 @@ inline size_t RegisterNativeReflectionTarget(
   }
   return retired_aliases;
 }
+
+// Assembly alone mutates the registry. Packets retain immutable versions;
+// a later registration/release cannot change an earlier packet's aliases.
+class NativeReflectionState {
+ public:
+  std::shared_ptr<const NativeReflectionRegistry> Snapshot() const { return registry_; }
+
+  size_t Register(const NativeReflectionTarget& target) {
+    EnsureWritable();
+    return RegisterNativeReflectionTarget(*registry_, target);
+  }
+
+  size_t Release(uint32_t resource) {
+    if (!registry_->contains(resource)) return 0;
+    EnsureWritable();
+    return EraseNativeReflectionRegistration(*registry_, resource);
+  }
+
+  void Reset() { registry_ = std::make_shared<NativeReflectionRegistry>(); }
+
+ private:
+  void EnsureWritable() {
+    if (registry_.use_count() != 1) {
+      registry_ = std::make_shared<NativeReflectionRegistry>(*registry_);
+    }
+  }
+  std::shared_ptr<NativeReflectionRegistry> registry_ =
+      std::make_shared<NativeReflectionRegistry>();
+};
 
 inline const NativeReflectionTarget* FindNativeReflectionSurface(
     const NativeReflectionRegistry& registry,

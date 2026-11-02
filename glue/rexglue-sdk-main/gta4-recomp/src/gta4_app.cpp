@@ -18,6 +18,7 @@
 #include <rex/cvar.h>
 #include <rex/logging.h>
 #include <rex/runtime.h>
+#include <rex/input/input_system.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xam/content_manager.h>
 #include <rex/system/xam/live_compatibility.h>
@@ -92,9 +93,9 @@ REXCVAR_DEFINE_STRING(gta4_present_mode, "vsync", "GTA IV/Graphics/Display",
                       "Vertical sync: vsync is On; immediate is Off; auto/mailbox are legacy modes")
     .allowed({"auto", "vsync", "fifo", "mailbox", "immediate"});
 REXCVAR_DEFINE_UINT32(gta4_frame_limit, 60, "GTA IV/Graphics/Display",
-                      "Maximum game and host presentation rate: 0 is unlocked; caps are 30, 40, 60, and "
-                      "120 FPS")
-    .allowed({"0", "30", "40", "60", "120"});
+                      "Maximum game and host presentation rate: 0 is unlocked; caps are 30, 40, 60, 120, "
+                      "144, 165, and 240 FPS")
+    .allowed({"0", "30", "40", "60", "120", "144", "165", "240"});
 REXCVAR_DEFINE_STRING(gta4_native_hdr_mode, "off", "GTA IV/Graphics/HDR",
                       "HDR output: off, scRGB, or Auto HDR")
     .allowed({"off", "scrgb", "auto_hdr"});
@@ -644,6 +645,13 @@ std::optional<rex::PathConfig> GTA4App::OnFinalizePaths(
 }
 
 void GTA4App::OnPreSetup(rex::RuntimeConfig& config) {
+  // A physical pad owns gameplay input. Windows prefers the native XInput
+  // representation, with SDL as the fallback for controllers without XInput.
+  config.input_factory = [](bool tool_mode) -> std::unique_ptr<rex::system::IInputSystem> {
+    auto input = rex::input::CreateDefaultInputSystem(tool_mode, true);
+    input->SetExclusiveGamepad(true);
+    return input;
+  };
   rex::input::mnk::SetNativeControllerCompatibilityBindings(
       gta4::input::KeyboardControllerBindings());
   if (!config.graphics && config.gpu_plugin.empty()) {

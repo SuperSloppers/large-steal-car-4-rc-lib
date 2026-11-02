@@ -10,6 +10,7 @@
  */
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <utility>
 
@@ -1119,8 +1120,25 @@ bool BaseHeap::AllocSystemHeap(uint32_t size, uint32_t alignment, uint32_t alloc
                     out_address);
 }
 
+// TEMP [LRDIAG] watch window for the GTA IV texture-object clobber investigation.
+static void LrHeapWatch(const char* what, memory::HeapType type, uint32_t heap_base, uint32_t addr,
+                        uint32_t size) {
+  uint32_t lo = 0, hi = 0;
+  if (type == memory::HeapType::kGuestPhysical && heap_base >= 0xE0000000u) {
+    lo = 0xFF100000u; hi = 0xFF200000u;
+  } else if (type == memory::HeapType::kHostPhysical) {
+    lo = 0x1F100000u; hi = 0x1F200000u;
+  } else {
+    return;
+  }
+  if (addr < hi && addr + size > lo)
+    std::fprintf(stderr, "[LRDIAG] heap %s base=%08X type=%d addr=%08X size=%X\n", what, heap_base,
+                 int(type), addr, size);
+}
+
 bool BaseHeap::AllocFixed(uint32_t base_address, uint32_t size, uint32_t alignment,
                           uint32_t allocation_type, uint32_t protect) {
+  LrHeapWatch("AllocFixed", heap_type_, heap_base_, base_address, size);
   alignment = rex::round_up(alignment, page_size_);
   if (base_address % alignment != 0) {
     if (base_address % page_size_ != 0) {
@@ -1362,6 +1380,7 @@ bool BaseHeap::AllocRange(uint32_t low_address, uint32_t high_address, uint32_t 
   }
 
   *out_address = heap_base_ + (start_page_number << page_size_shift_);
+  LrHeapWatch("AllocRange", heap_type_, heap_base_, *out_address, page_count << page_size_shift_);
   return true;
 }
 
@@ -1397,6 +1416,7 @@ bool BaseHeap::Decommit(uint32_t address, uint32_t size) {
 
 bool BaseHeap::Release(uint32_t base_address, uint32_t* out_region_size) {
   std::lock_guard<std::recursive_mutex> heap_lock(heap_mutex_);
+  LrHeapWatch("Release", heap_type_, heap_base_, base_address, page_size_);
   AccessEpoch::Change access_change(access_epoch_);
 
   // Given address must be a region base address.

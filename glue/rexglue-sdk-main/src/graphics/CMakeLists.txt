@@ -202,7 +202,10 @@ if(REXGLUE_USE_VULKAN)
         "Directory containing a DXC shared library compatible with gta4-native shader overrides")
     set(GTA4_NATIVE_SHADER_COMMON
         "${GTA4_NATIVE_SHADER_OVERRIDE_ROOT}/xenos_shader_common.h")
-    if(CMAKE_HOST_WIN32)
+    if(GTA4_NATIVE_DXC_OVERRIDE)
+        # Bundled DXC 1.8 crashes on ps_bink.hlsl (see Apple note below); pass a newer dxc.exe.
+        set(GTA4_NATIVE_DXC "${GTA4_NATIVE_DXC_OVERRIDE}")
+    elseif(CMAKE_HOST_WIN32)
         set(GTA4_NATIVE_DXC
             "${GTA4_NATIVE_DXC_ROOT}/bin/${GTA4_NATIVE_DXC_ARCH}/dxc.exe")
     elseif(CMAKE_HOST_APPLE)

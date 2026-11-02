@@ -6,6 +6,7 @@
 #endif
 
 #include <memory>
+#include <cpu/ppc_context.h>
 namespace rex::memory { class Memory; }
 
 struct Memory
@@ -42,12 +43,25 @@ public:
         return host >= base && host < (base + PPC_MEMORY_SIZE);
     }
 
+    // Guest 0xE0000000+ (4 KB physical heap) lives at host +0x1000 on Windows/macOS.
+    // Recompiled code (REX_PHYS_HOST_OFFSET) and the RexGlue heaps both apply this,
+    // so host<->guest conversions here must too or Liberty's objects alias the
+    // neighbouring guest page. See rex::memory::detail::PhysicalHostOffset.
+    static constexpr size_t PhysicalHostOffset(size_t guest) noexcept
+    {
+#if defined(_WIN32) || defined(__APPLE__)
+        return (guest >= 0xE0000000ull && guest < 0x100000000ull) ? 0x1000 : 0;
+#else
+        return 0;
+#endif
+    }
+
     void* Translate(size_t offset) const noexcept
     {
         if (offset)
             assert(offset < PPC_MEMORY_SIZE);
 
-        return base + offset;
+        return base + offset + PhysicalHostOffset(offset);
     }
 
     uint32_t MapVirtual(const void* host) const noexcept
@@ -55,7 +69,12 @@ public:
         if (host)
             assert(IsInMemoryRange(host));
 
-        return static_cast<uint32_t>(static_cast<const uint8_t*>(host) - base);
+        size_t offset = static_cast<size_t>(static_cast<const uint8_t*>(host) - base);
+#if defined(_WIN32) || defined(__APPLE__)
+        if (offset >= 0xE0001000ull && offset < 0x100001000ull)
+            offset -= 0x1000;
+#endif
+        return static_cast<uint32_t>(offset);
     }
 
     PPCFunc* FindFunction(uint32_t guest) const noexcept

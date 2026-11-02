@@ -22,3 +22,23 @@ void os::logger::PlatformShutdownSinks()
 {
     // spdlog handles sink cleanup on shutdown; nothing to do here.
 }
+
+// Mirrors logger_macos.cpp: rex owns logger setup, but without its console
+// sink, since PlatformInitSinks installs the wincolor one.
+void os::logger::Init()
+{
+    if (!rex::diagnostics::IsEnabled(
+            rex::diagnostics::Category::kLogging)) return;
+    rex::LogConfig cfg;
+    cfg.log_to_console = false;
+    cfg.default_level  = spdlog::level::trace;
+    cfg.flush_level    = spdlog::level::trace;
+    rex::InitLogging(cfg);
+
+    PlatformInitSinks();
+}
+
+void os::logger::Shutdown()
+{
+    PlatformShutdownSinks();
+}

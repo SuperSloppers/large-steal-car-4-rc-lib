@@ -968,6 +968,8 @@ void KernelState::WaitForThreadsToExit(const std::vector<object_ref<XThread>>& t
 
 void KernelState::TerminateTitle() {
   REXSYS_DEBUG("KernelState::TerminateTitle");
+  fprintf(stderr, "[LRDIAG] KernelState::TerminateTitle called\n");
+  fflush(stderr);
 
   constexpr uint32_t kCooperativeExitTimeoutMs = 200;
 

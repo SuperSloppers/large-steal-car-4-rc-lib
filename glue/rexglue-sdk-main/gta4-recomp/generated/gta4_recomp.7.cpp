@@ -2595,7 +2595,7 @@ DEFINE_REX_FUNC(sub_8220FDB8) {
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r29.u32 + 328);
 	// bl 0x82a11f68
 	ctx.lr = 0x8220FE04;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// li r28,0
 	ctx.r28.s64 = 0;
 	// mr r3,r31
@@ -10553,7 +10553,7 @@ loc_82213488:
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r1.u32 + 2200);
 	// bl 0x82a11f68
 	ctx.lr = 0x822134AC;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// lbz r11,3896(r1)
 	ctx.r11.u64 = REX_LOAD_U8(ctx.r1.u32 + 3896);
 	// stw r22,2200(r1)

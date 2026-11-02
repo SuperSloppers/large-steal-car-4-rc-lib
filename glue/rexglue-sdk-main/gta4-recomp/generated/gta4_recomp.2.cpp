@@ -41455,7 +41455,7 @@ loc_8219055C:
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r31.u32 + 0);
 	// bl 0x82a11f68
 	ctx.lr = 0x82190578;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// stw r22,0(r31)
 	REX_STORE_U32(ctx.r31.u32 + 0, ctx.r22.u32);
 loc_8219057C:

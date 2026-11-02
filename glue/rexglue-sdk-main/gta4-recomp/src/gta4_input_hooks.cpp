@@ -1420,7 +1420,7 @@ void ResetMouseConversion() {
 InputEpoch CaptureEpoch(const PPCContext& entry_context, uint8_t* base,
                         uint32_t caller, bool helicopter_controls) {
   NativeInputState state{};
-  const bool native_valid = rex::input::mnk::ConsumeNativeInputState(&state);
+  bool native_valid = rex::input::mnk::ConsumeNativeInputState(&state);
   const bool touch_active = rex::input::TouchControlsActive() && !GTA4_TouchTitleInputOwned();
   if (!native_valid) state = {};
   const uint32_t input_user = native_valid ? state.user_index : 0;
@@ -1428,8 +1428,17 @@ InputEpoch CaptureEpoch(const PPCContext& entry_context, uint8_t* base,
   auto* runtime = rex::Runtime::instance();
   auto* input_system =
       runtime ? static_cast<rex::input::InputSystem*>(runtime->input_system()) : nullptr;
-  const bool gamepad_valid =
-      input_system && input_system->TryGetLastState(input_user, &gamepad_state);
+  bool physical_gamepad = false;
+  const bool gamepad_valid = input_system &&
+      input_system->TryGetLastState(input_user, &gamepad_state, &physical_gamepad);
+  if (gamepad_valid && physical_gamepad && input_system->exclusive_gamepad()) {
+    // Consume and discard keyboard/mouse events while the pad owns this slot.
+    // A controller's desktop HID output must not inject a second action or
+    // a much faster mouse camera on top of GTA's native controller replay.
+    state = {};
+    state.user_index = input_user;
+    native_valid = false;
+  }
   const bool valid = NeedsNativeActionReplay(native_valid, touch_active,
       REXCVAR_GET(gta4_motion_aim), gamepad_valid);
   const uint16_t gamepad_buttons =

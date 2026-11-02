@@ -14000,7 +14000,7 @@ DEFINE_REX_FUNC(sub_82A265F8) {
 	REX_STORE_U32(ctx.r31.u32 + 1300, ctx.r28.u32);
 	// bl 0x82a11f68
 	ctx.lr = 0x82A26654;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// stw r30,1264(r31)
 	REX_STORE_U32(ctx.r31.u32 + 1264, ctx.r30.u32);
 loc_82A26658:
@@ -14016,7 +14016,7 @@ loc_82A26658:
 	if (ctx.cr6.eq) goto loc_82A26674;
 	// bl 0x82a11f68
 	ctx.lr = 0x82A26670;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// stw r30,1304(r31)
 	REX_STORE_U32(ctx.r31.u32 + 1304, ctx.r30.u32);
 loc_82A26674:
@@ -14032,7 +14032,7 @@ loc_82A26674:
 	if (ctx.cr6.eq) goto loc_82A26690;
 	// bl 0x82a11f68
 	ctx.lr = 0x82A2668C;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// stw r30,1312(r31)
 	REX_STORE_U32(ctx.r31.u32 + 1312, ctx.r30.u32);
 loc_82A26690:
@@ -15346,7 +15346,7 @@ loc_82A26EF4:
 	ctx.r3.u64 = ctx.r31.u64;
 	// bl 0x82a11f68
 	ctx.lr = 0x82A26F10;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// li r3,0
 	ctx.r3.s64 = 0;
 	// bl 0x82a13408
@@ -49943,7 +49943,7 @@ loc_82A35120:
 	if (ctx.cr6.eq) goto loc_82A35130;
 	// bl 0x82a11f68
 	ctx.lr = 0x82A35130;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 loc_82A35130:
 	// lwz r3,84(r1)
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r1.u32 + 84);
@@ -52521,7 +52521,7 @@ loc_82A362C0:
 	if (ctx.cr6.eq) goto loc_82A362D0;
 	// bl 0x82a11f68
 	ctx.lr = 0x82A362D0;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 loc_82A362D0:
 	// lwz r3,84(r1)
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r1.u32 + 84);
@@ -52856,7 +52856,7 @@ loc_82A36510:
 	if (ctx.cr6.eq) goto loc_82A36520;
 	// bl 0x82a11f68
 	ctx.lr = 0x82A36520;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 loc_82A36520:
 	// lwz r3,84(r1)
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r1.u32 + 84);
@@ -53880,7 +53880,7 @@ loc_82A36BDC:
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r22.u32 + 0);
 	// bl 0x82a11f68
 	ctx.lr = 0x82A36BE4;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// stw r28,0(r22)
 	REX_STORE_U32(ctx.r22.u32 + 0, ctx.r28.u32);
 	// b 0x82a36bf0

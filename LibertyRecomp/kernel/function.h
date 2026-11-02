@@ -150,7 +150,7 @@ struct ArgTranslator
             return nullptr;
         }
 
-        return reinterpret_cast<T>(base + static_cast<uint32_t>(v));
+        return reinterpret_cast<T>(base + static_cast<uint32_t>(v) + Memory::PhysicalHostOffset(static_cast<uint32_t>(v)));
     }
 
     template<typename T>

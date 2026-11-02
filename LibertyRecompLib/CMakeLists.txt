@@ -104,5 +104,5 @@ target_include_directories(LibertyRecompLib PRIVATE
 
 # RexGlue generated code needs access to RexGlue SDK headers
 if(TARGET rexcore)
-    target_link_libraries(LibertyRecompLib PRIVATE rexcore rexruntime rexkernel)
+    target_link_libraries(LibertyRecompLib PRIVATE rexcore rexruntime)  # rexkernel merged into rexruntime (rex::kernel is an alias)
 endif()

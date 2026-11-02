@@ -303,7 +303,10 @@ set(LIBERTY_RECOMP_GPU_CXX_SOURCES
 )
 
 # Windows-only upscaler implementations (require D3D12)
-if (WIN32)
+# Local fix: stale vs. reworked upscaler API; opt-in until ported.
+option(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS "Build legacy DLSS/FSR3/XeSS backends" OFF)
+if (WIN32 AND LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
+    add_compile_definitions(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
     list(APPEND LIBERTY_RECOMP_GPU_CXX_SOURCES
         "gpu/upscaler_xess.cpp"
         "gpu/upscaler_fsr3.cpp"
@@ -1487,7 +1490,16 @@ if (NOT (LIBERTY_RECOMP_TARGET_PLATFORM STREQUAL "ps4" OR CMAKE_SYSTEM_NAME STRE
         set(LIBERTY_RECOMP_HAS_DISCORD_RPC TRUE)
         message(STATUS "Discord RPC: found via vcpkg")
     else()
-        message(STATUS "Discord RPC: not found, presence will be disabled")
+        # vcpkg's discord-rpc port ships no CMake config; fall back to the library itself.
+        find_library(LIBERTY_DISCORD_RPC_LIBRARY NAMES discord-rpc)
+        if (LIBERTY_DISCORD_RPC_LIBRARY)
+            add_library(discord-rpc STATIC IMPORTED)
+            set_target_properties(discord-rpc PROPERTIES IMPORTED_LOCATION "${LIBERTY_DISCORD_RPC_LIBRARY}")
+            set(LIBERTY_RECOMP_HAS_DISCORD_RPC TRUE)
+            message(STATUS "Discord RPC: found library ${LIBERTY_DISCORD_RPC_LIBRARY}")
+        else()
+            message(STATUS "Discord RPC: not found, presence will be disabled")
+        endif()
     endif()
 endif()
 

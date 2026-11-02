@@ -11,7 +11,10 @@ TEST_CASE("GTA IV frame limiter accepts only menu-supported rates") {
   REQUIRE(frame_limiter::IsSupportedLimit(60));
   REQUIRE(frame_limiter::IsSupportedLimit(120));
   REQUIRE_FALSE(frame_limiter::IsSupportedLimit(1));
-  REQUIRE_FALSE(frame_limiter::IsSupportedLimit(144));
+  REQUIRE(frame_limiter::IsSupportedLimit(144));
+  REQUIRE(frame_limiter::IsSupportedLimit(165));
+  REQUIRE(frame_limiter::IsSupportedLimit(240));
+  REQUIRE_FALSE(frame_limiter::IsSupportedLimit(144 + 1));
 }
 
 TEST_CASE("GTA IV frame limiter distributes fractional nanoseconds without drift") {

@@ -572,6 +572,9 @@ X_STATUS XThread::Terminate(int exit_code) {
 void XThread::Execute() {
   REXSYS_NOISY_DEBUG("Execute thid {} (handle={:08X}, '{}', native={:08X})", thread_id_, handle(),
                      thread_name_, thread_->system_id());
+  fprintf(stderr, "[LRDIAG] XThread::Execute '%s' start=%08X\n", thread_name_.c_str(),
+          creation_params_.start_address);
+  fflush(stderr);
 
   // Let the kernel know we are starting.
   kernel_state_->OnThreadExecute(this);
@@ -613,6 +616,8 @@ void XThread::Execute() {
   PPCFunc* func = dispatcher->GetFunction(address);
   if (!func) {
     REXSYS_ERROR("XThread::Execute - No function registered at {:08X}", address);
+    fprintf(stderr, "[LRDIAG] Execute: no function at %08X\n", address);
+    fflush(stderr);
     return;
   }
 
@@ -649,6 +654,9 @@ void XThread::Execute() {
   func(*ctx, base);
 
   exit_code = static_cast<int>(ctx->r3.u32);
+  fprintf(stderr, "[LRDIAG] '%s' guest func %08X returned r3=0x%X\n", thread_name_.c_str(),
+          address, exit_code);
+  fflush(stderr);
 
   // If we got here it means the execute completed without an exit being called.
   // Treat the return code as an implicit exit code (if desired).

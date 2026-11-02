@@ -37,7 +37,7 @@ loc_82A7F7E0:
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r31.u32 + 84);
 	// bl 0x82a11f68
 	ctx.lr = 0x82A7F7F4;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 loc_82A7F7F4:
 	// lwz r11,252(r31)
 	ctx.r11.u64 = REX_LOAD_U32(ctx.r31.u32 + 252);
@@ -206,7 +206,7 @@ loc_82A7F8F4:
 	ctx.r4.u64 = ctx.r10.u64 + ctx.r11.u64;
 	// bl 0x82a12958
 	ctx.lr = 0x82A7F91C;
-	ReadFile(ctx, base);
+	gta4_ReadFile(ctx, base);
 	// lwz r3,80(r1)
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r1.u32 + 80);
 	// stw r27,36(r31)
@@ -590,7 +590,7 @@ DEFINE_REX_FUNC(sub_82A7FB48) {
 	REX_STORE_U32(ctx.r31.u32 + 120, ctx.r11.u32);
 	// bl 0x82a127e0
 	ctx.lr = 0x82A7FB98;
-	SetFilePointer(ctx, base);
+	gta4_SetFilePointer(ctx, base);
 	// stw r3,124(r31)
 	REX_STORE_U32(ctx.r31.u32 + 124, ctx.r3.u32);
 loc_82A7FB9C:
@@ -660,7 +660,7 @@ loc_82A7FBFC:
 	ctx.r4.s64 = -2147483648;
 	// bl 0x82a131b0
 	ctx.lr = 0x82A7FC1C;
-	CreateFileA(ctx, base);
+	gta4_CreateFileA(ctx, base);
 	// stw r3,84(r31)
 	REX_STORE_U32(ctx.r31.u32 + 84, ctx.r3.u32);
 	// lwz r11,84(r31)
