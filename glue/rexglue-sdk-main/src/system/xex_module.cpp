@@ -1077,6 +1077,12 @@ bool XexModule::SetupLibraryImports(const std::string_view name,
   // Import table entries alternate: type 0 has ordinal info, type 1 has thunk address.
   // They may not come in immediate succession, so we pair by ordinal.
   std::unordered_map<uint16_t, ImportLibraryFn> import_map;
+  // [LRDIAG] temporary: variable-import patch accounting
+  int lr_var = 0, lr_patched = 0, lr_noexp = 0, lr_notvar = 0, lr_unimpl = 0;
+  fprintf(stderr, "[LRDIAG] SetupLibraryImports '%s' base='%s' count=%u resolver=%p\n",
+          std::string(name).c_str(), std::string(base_name).c_str(), (unsigned)library->count,
+          (void*)export_resolver);
+  fflush(stderr);
 
   for (uint32_t i = 0; i < library->count; i++) {
     uint32_t record_addr = library->import_table[i];
@@ -1095,10 +1101,28 @@ bool XexModule::SetupLibraryImports(const std::string_view name,
     if (record_type == 0) {
       // Variable import - value_address is where the variable value is stored
       import_info.value_address = record_addr;
+      lr_var++;
 
       // Patch variable imports in guest memory with the actual address
       if (export_resolver) {
-        auto kernel_export = export_resolver->GetExportByOrdinal(base_name, ordinal);
+        // Export tables are registered under the full module name
+        // ("xboxkrnl.exe", "xam.xex") and matched by prefix, so the
+        // extension-stripped base name never matches. Try the full name first.
+        auto kernel_export = export_resolver->GetExportByOrdinal(name, ordinal);
+        if (!kernel_export) {
+          kernel_export = export_resolver->GetExportByOrdinal(base_name, ordinal);
+        }
+        if (!kernel_export) {
+          if (lr_noexp++ < 5)
+            fprintf(stderr, "[LRDIAG]   no export for ord 0x%X (slot %08X)\n", ordinal, record_addr);
+        } else if (kernel_export->type != runtime::Export::Type::kVariable) {
+          lr_notvar++;
+        } else if (!(kernel_export->is_implemented() && kernel_export->variable_ptr)) {
+          lr_unimpl++;
+          fprintf(stderr, "[LRDIAG]   unimpl var ord 0x%X %s\n", ordinal, kernel_export->name);
+        } else {
+          lr_patched++;
+        }
         if (kernel_export && kernel_export->type == runtime::Export::Type::kVariable) {
           if (kernel_export->is_implemented() && kernel_export->variable_ptr) {
             // Write the variable address to guest memory
@@ -1119,6 +1143,9 @@ bool XexModule::SetupLibraryImports(const std::string_view name,
       import_info.thunk_address = record_addr;
     }
   }
+  fprintf(stderr, "[LRDIAG]   vars=%d patched=%d noexp=%d notvar=%d unimpl=%d\n", lr_var,
+          lr_patched, lr_noexp, lr_notvar, lr_unimpl);
+  fflush(stderr);
 
   // Convert map to vector (sorted by ordinal for consistent output)
   std::vector<uint16_t> ordinals;

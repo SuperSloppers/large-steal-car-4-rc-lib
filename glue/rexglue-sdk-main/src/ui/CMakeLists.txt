@@ -119,6 +119,10 @@ target_link_libraries(rexui PUBLIC
     SDL3::SDL3
 )
 target_link_libraries(rexui PRIVATE utf8cpp)
+# presenter.cpp uses CreateDXGIFactory1 on Windows regardless of the D3D12 backend.
+if(WIN32)
+    target_link_libraries(rexui PUBLIC dxgi)
+endif()
 if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     target_link_libraries(rexui PRIVATE "-framework AppKit" "-framework QuartzCore")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")

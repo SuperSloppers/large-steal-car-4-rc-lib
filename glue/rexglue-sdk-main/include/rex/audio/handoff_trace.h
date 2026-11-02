@@ -13,7 +13,11 @@
 
 namespace rex::audio::handoff {
 extern std::atomic<bool> enabled;
+#ifdef _WIN32
+bool Enabled() noexcept;  // data symbols don't cross the rexruntime.dll boundary
+#else
 inline bool Enabled() noexcept { return enabled.load(std::memory_order_acquire); }
+#endif
 inline uint64_t Clock() noexcept {
   return uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::steady_clock::now().time_since_epoch()).count());

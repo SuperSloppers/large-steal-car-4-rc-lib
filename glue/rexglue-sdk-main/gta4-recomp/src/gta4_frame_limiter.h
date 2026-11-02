@@ -10,7 +10,8 @@ inline constexpr int64_t kNanosecondsPerSecond = 1'000'000'000;
 constexpr bool IsSupportedLimit(uint32_t frames_per_second) noexcept {
   return frames_per_second == 0 || frames_per_second == 30 || frames_per_second == 40 ||
          frames_per_second == 60 ||
-         frames_per_second == 120;
+         frames_per_second == 120 || frames_per_second == 144 ||
+         frames_per_second == 165 || frames_per_second == 240;
 }
 
 struct State {

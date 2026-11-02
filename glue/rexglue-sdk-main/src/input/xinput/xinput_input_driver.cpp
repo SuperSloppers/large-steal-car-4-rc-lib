@@ -169,6 +169,8 @@ X_RESULT XinputInputDriver::GetState(uint32_t user_index, X_INPUT_STATE* out_sta
   out_state->gamepad.thumb_rx = native_state.state.Gamepad.sThumbRX;
   out_state->gamepad.thumb_ry = native_state.state.Gamepad.sThumbRY;
 
+  if (!is_active()) out_state->gamepad = {};
+
   return result;
 }
 

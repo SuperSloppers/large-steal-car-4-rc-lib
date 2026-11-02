@@ -44,10 +44,11 @@ bool GamepadStatesEqual(const X_INPUT_GAMEPAD& lhs, const X_INPUT_GAMEPAD& rhs) 
          lhs.thumb_ry == rhs.thumb_ry;
 }
 
-bool ReadVirtualGamepad(uint32_t user_index, X_INPUT_GAMEPAD& gamepad) {
+bool ReadVirtualGamepad(uint32_t user_index, X_INPUT_GAMEPAD& gamepad,
+                        bool include_keyboard = true) {
   const bool native_active = ReadTouchGamepad(user_index, &gamepad);
   X_INPUT_GAMEPAD compatibility{};
-  const bool compatibility_active = TouchControlsAvailable() &&
+  const bool compatibility_active = include_keyboard && TouchControlsAvailable() &&
       mnk::ReadVirtualControllerCompatibilityGamepad(user_index, compatibility);
   if (compatibility_active) {
     gamepad.buttons = static_cast<uint16_t>(gamepad.buttons) |
@@ -155,6 +156,7 @@ X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
 
   bool any_connected = false;
   bool first_result = true;
+  bool physical_gamepad = false;
   X_INPUT_STATE merged = {};
   BeginInputTracePoll();
 
@@ -191,6 +193,21 @@ X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
       any_connected = true;
     }
     if (result == X_ERROR_SUCCESS) {
+      if (exclusive_gamepad_) {
+        if (driver->is_physical_gamepad()) {
+          // Prefer the first connected pad driver (XInput before SDL on
+          // Windows). Do not combine a physical HID device with its virtual
+          // XInput representation or with keyboard controller emulation.
+          if (physical_gamepad) continue;
+          physical_gamepad = true;
+          merged = state;
+          first_result = false;
+          continue;
+        }
+        if (physical_gamepad) continue;
+      } else if (driver->is_physical_gamepad()) {
+        physical_gamepad = true;
+      }
       if (first_result) {
         merged = state;
         first_result = false;
@@ -220,7 +237,7 @@ X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
   }
 
   X_INPUT_GAMEPAD virtual_pad{};
-  if (ReadVirtualGamepad(user_index, virtual_pad)) {
+  if (ReadVirtualGamepad(user_index, virtual_pad, !exclusive_gamepad_ || !physical_gamepad)) {
     // Same host-UI ownership gate as every physical driver. Keep connectivity
     // but publish a neutral virtual source when the title cannot accept input.
     if (is_active_callback_ && !is_active_callback_()) virtual_pad = {};
@@ -244,6 +261,7 @@ X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
       MergedStateTracker& tracker = merged_state_trackers_[user_index];
       tracker.gamepad = {};
       tracker.available = false;
+      tracker.physical_gamepad = false;
     }
     return any_connected ? X_ERROR_EMPTY : X_ERROR_DEVICE_NOT_CONNECTED;
   }
@@ -261,6 +279,7 @@ X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
     }
     tracker.gamepad = merged.gamepad;
     tracker.available = true;
+    tracker.physical_gamepad = physical_gamepad;
     merged.packet_number = tracker.packet_number;
     if (IsInputTraceEnabled() && merged_changed) {
       const uint64_t causal_sequence = InputTraceCausalSequence();
@@ -282,7 +301,9 @@ X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
   return X_ERROR_SUCCESS;
 }
 
-bool InputSystem::TryGetLastState(uint32_t user_index, X_INPUT_STATE* out_state) {
+bool InputSystem::TryGetLastState(uint32_t user_index, X_INPUT_STATE* out_state,
+                                 bool* physical_gamepad) {
+  if (physical_gamepad) *physical_gamepad = false;
   if (!out_state || user_index >= merged_state_trackers_.size()) {
     return false;
   }
@@ -294,6 +315,7 @@ bool InputSystem::TryGetLastState(uint32_t user_index, X_INPUT_STATE* out_state)
   *out_state = {};
   out_state->packet_number = tracker.packet_number;
   out_state->gamepad = tracker.gamepad;
+  if (physical_gamepad) *physical_gamepad = tracker.physical_gamepad;
   return true;
 }
 
@@ -349,7 +371,7 @@ bool InputSystem::TryGetMotionState(uint32_t user_index, MotionState* out_state)
   return false;
 }
 
-std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
+std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode, bool prefer_xinput) {
   auto input = std::make_unique<InputSystem>(nullptr);
 
   if (!tool_mode) {
@@ -357,23 +379,24 @@ std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode) {
     auto switch_driver = std::make_unique<nx::SwitchInputDriver>(nullptr, 0);
     if (switch_driver->Setup() == X_STATUS_SUCCESS) input->AddDriver(std::move(switch_driver));
 #else
-    const bool expose_sdl_gamepad_state = REXCVAR_GET(input_backend) == "sdl";
+    const bool expose_sdl_gamepad_state = prefer_xinput || REXCVAR_GET(input_backend) == "sdl";
     auto sdl_driver = std::make_unique<sdl::SDLInputDriver>(nullptr, 0, expose_sdl_gamepad_state);
-    if (sdl_driver->Setup() == X_STATUS_SUCCESS) {
-      // SDL remains present even when XInput supplies controller state: it is
-      // the cross-platform UI-thread authority for touch, keyboard, and
-      // controller device inventory.
-      input->AddDriver(std::move(sdl_driver));
-    }
+    const bool sdl_ready = sdl_driver->Setup() == X_STATUS_SUCCESS;
 
 #if REX_PLATFORM_WIN32
-    if (REXCVAR_GET(input_backend) == "xinput") {
+    if (prefer_xinput || REXCVAR_GET(input_backend) == "xinput") {
       auto xinput_driver = std::make_unique<xinput::XinputInputDriver>(nullptr, 0);
       if (xinput_driver->Setup() == X_STATUS_SUCCESS) {
         input->AddDriver(std::move(xinput_driver));
       }
     }
 #endif
+
+    if (sdl_ready) {
+      // Keep SDL's UI-thread device inventory and non-XInput fallback. In
+      // exclusive mode its pad state is used only when XInput is disconnected.
+      input->AddDriver(std::move(sdl_driver));
+    }
 
     // MnK driver (keyboard/mouse -> controller emulation)
     auto mnk_driver = std::make_unique<mnk::MnkInputDriver>(nullptr, 0);

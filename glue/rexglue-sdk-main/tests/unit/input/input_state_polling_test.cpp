@@ -66,6 +66,8 @@ class MutableStateDriver final : public InputDriver {
 
   X_INPUT_STATE state{};
   X_RESULT connection_result = X_ERROR_SUCCESS;
+  bool physical = true;
+  bool is_physical_gamepad() const override { return physical; }
 };
 
 }  // namespace
@@ -299,6 +301,55 @@ TEST_CASE("native touch and compatibility input merge without hiding either sour
   CHECK(state.gamepad.buttons == 0);
   CHECK(state.gamepad.right_trigger == 0);
   CHECK(state.gamepad.thumb_lx == 0);
+  CHECK(state.gamepad.thumb_rx == 0);
+}
+
+TEST_CASE("Exclusive controller owns native values and suppresses duplicate sources",
+          "[input][polling][exclusive]") {
+  InputSystem input(nullptr);
+  input.SetExclusiveGamepad(true);
+  auto keyboard_driver = std::make_unique<MutableStateDriver>();
+  keyboard_driver->physical = false;
+  auto primary_driver = std::make_unique<MutableStateDriver>();
+  auto fallback_driver = std::make_unique<MutableStateDriver>();
+  auto* primary = primary_driver.get();
+  auto* fallback = fallback_driver.get();
+  keyboard_driver->state.gamepad.buttons = X_INPUT_GAMEPAD_B;
+  keyboard_driver->state.gamepad.thumb_rx = 32767;
+  primary->state.gamepad.buttons = X_INPUT_GAMEPAD_A;
+  primary->state.gamepad.thumb_rx = 12000;
+  primary->state.gamepad.thumb_ly = -32768;
+  primary->state.gamepad.left_trigger = 31;
+  fallback->state.gamepad.buttons = X_INPUT_GAMEPAD_X;
+  fallback->state.gamepad.thumb_rx = -30000;
+  input.AddDriver(std::move(keyboard_driver));
+  input.AddDriver(std::move(primary_driver));
+  input.AddDriver(std::move(fallback_driver));
+
+  X_INPUT_STATE state{};
+  bool physical = false;
+  REQUIRE(input.GetState(0, &state) == X_ERROR_SUCCESS);
+  CHECK(state.gamepad.buttons == X_INPUT_GAMEPAD_A);
+  CHECK(state.gamepad.thumb_rx == 12000);
+  CHECK(state.gamepad.thumb_ly == -32768);
+  CHECK(state.gamepad.left_trigger == 31);
+  REQUIRE(input.TryGetLastState(0, &state, &physical));
+  CHECK(physical);
+
+  primary->connection_result = X_ERROR_DEVICE_NOT_CONNECTED;
+  REQUIRE(input.GetState(0, &state) == X_ERROR_SUCCESS);
+  CHECK(state.gamepad.buttons == X_INPUT_GAMEPAD_X);
+  CHECK(state.gamepad.thumb_rx == -30000);
+  fallback->connection_result = X_ERROR_DEVICE_NOT_CONNECTED;
+  REQUIRE(input.GetState(0, &state) == X_ERROR_SUCCESS);
+  CHECK(state.gamepad.buttons == X_INPUT_GAMEPAD_B);
+  REQUIRE(input.TryGetLastState(0, &state, &physical));
+  CHECK_FALSE(physical);
+
+  primary->connection_result = X_ERROR_SUCCESS;
+  primary->state.gamepad = {};
+  REQUIRE(input.GetState(0, &state) == X_ERROR_SUCCESS);
+  CHECK(state.gamepad.buttons == 0);
   CHECK(state.gamepad.thumb_rx == 0);
 }
 

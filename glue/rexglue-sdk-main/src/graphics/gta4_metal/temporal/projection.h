@@ -18,11 +18,11 @@ inline std::optional<CameraProjection> DescribeProjection(const std::array<float
     return {};
   const double z0 = -double(p[14]) / p[10], z1 = -double(p[14]) / (double(p[10]) - p[11]);
   if (!std::isfinite(z0) || !std::isfinite(z1)) return {};
-  const float near = float(std::min(std::abs(z0), std::abs(z1))),
-              far = float(std::max(std::abs(z0), std::abs(z1)));
-  if (near <= 0 || far <= near || far > 1.0e8f) return {};
+  const float near_z = float(std::min(std::abs(z0), std::abs(z1))),
+              far_z = float(std::max(std::abs(z0), std::abs(z1)));
+  if (near_z <= 0 || far_z <= near_z || far_z > 1.0e8f) return {};
   constexpr double pi = 3.1415926535897932384626433832795;
-  return CameraProjection{near, far, float(2 * std::atan(1.0 / std::abs(double(p[5]))) * 180 / pi),
+  return CameraProjection{near_z, far_z, float(2 * std::atan(1.0 / std::abs(double(p[5]))) * 180 / pi),
                           std::abs(p[5] / p[0]), std::abs(z0) > std::abs(z1)};
 }
 inline std::array<float, 16> JitterProjection(const std::array<float, 16>& p,

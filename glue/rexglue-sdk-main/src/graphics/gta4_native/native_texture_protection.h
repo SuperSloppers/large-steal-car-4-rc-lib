@@ -1,8 +1,11 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
-#include <unordered_map>
 #include <unordered_set>
+#include <utility>
+#include <vector>
+
+#include "frame_constant_arena.h"
 
 namespace rex::graphics::gta4_native {
 
@@ -22,35 +25,72 @@ void VisitNativeCommandTextureGenerations(const Command& command, Visitor&& visi
   for (const auto& resource : command.textures) texture(resource);
 }
 
+// Published under the queue lock before commands leave the title queue. Keep
+// the entire batch protected until it drains, including its active command.
+// Readers never inspect the worker's mutable command owners or cursor.
+class NativeWorkerTextureProtection {
+ public:
+  template <typename Command>
+  void Capture(const Command& command) {
+    VisitNativeCommandTextureGenerations(command, [&](uint64_t generation) {
+      if (generation) generations_.insert(generation);
+    });
+  }
+  void AppendTo(std::unordered_set<uint64_t>& generations) const {
+    generations.insert(generations_.begin(), generations_.end());
+  }
+  void Reset() { generations_.clear(); }
+
+ private:
+  std::unordered_set<uint64_t> generations_;
+};
+
 // Queue lock owns this index. Counts are logical references, not shared_ptrs or
-// GPU ownership. Every zero count is removed immediately. If an invariant is
+// GPU ownership. Zero counts are pruned in bulk and never reported. If an invariant is
 // violated the renderer falls back to its original queue scan, never guessing
 // that an image is safe to retire.
 class NativeTextureProtectionIndex {
  public:
   bool Retain(uint64_t generation) {
     if (!generation) return true;
-    auto& count = counts_[generation];
-    if (count == UINT64_MAX) { valid_ = false; return false; }
-    ++count; return true;
+    const auto entry = counts_.Insert(generation, 0);
+    if (!entry || *entry.value == UINT64_MAX) { valid_ = false; return false; }
+    if (!(*entry.value)++) ++live_;
+    return true;
   }
   bool Release(uint64_t generation) {
     if (!generation) return true;
-    const auto it = counts_.find(generation);
-    if (it == counts_.end() || !it->second) { valid_ = false; return false; }
-    if (!--it->second) counts_.erase(it);
+    uint64_t* count = counts_.Find(generation);
+    if (!count || !*count) { valid_ = false; return false; }
+    // Keep zero counts: per-draw erase/insert churn dominated this index.
+    if (--*count) return true;
+    --live_;
+    if (++zero_count_ > 8192) Prune();
     return true;
   }
   void AppendTo(std::unordered_set<uint64_t>& destination) const {
-    destination.reserve(destination.size() + counts_.size());
-    for (const auto& [generation, count] : counts_) if (count) destination.insert(generation);
+    destination.reserve(destination.size() + live_);
+    counts_.ForEach([&](uint64_t generation, uint64_t count) { if (count) destination.insert(generation); });
   }
-  bool Contains(uint64_t generation) const { return counts_.contains(generation); }
-  size_t size() const { return counts_.size(); }
+  bool Contains(uint64_t generation) const {
+    const uint64_t* count = counts_.Find(generation);
+    return count && *count;
+  }
+  size_t size() const { return live_; }
   bool valid() const { return valid_; }
-  void Reset() { counts_.clear(); valid_ = true; }
+  void Reset() { counts_ = {}; live_ = zero_count_ = 0; valid_ = true; }
  private:
-  std::unordered_map<uint64_t, uint64_t> counts_;
+  void Prune() {
+    std::vector<std::pair<uint64_t, uint64_t>> live;
+    live.reserve(live_);
+    counts_.ForEach([&](uint64_t generation, uint64_t count) { if (count) live.emplace_back(generation, count); });
+    if (!counts_.ResetGeneration()) counts_ = {};
+    for (const auto& [generation, count] : live) if (!counts_.Insert(generation, count)) valid_ = false;
+    zero_count_ = 0;
+  }
+  FrameGenerationMap<uint64_t, uint64_t> counts_;
+  size_t live_ = 0;
+  size_t zero_count_ = 0;
   bool valid_ = true;
 };
 }  // namespace rex::graphics::gta4_native

@@ -58,6 +58,7 @@ class MnkInputDriver final : public InputDriver,
 
   X_STATUS Setup() override;
   const char* trace_name() const override { return "mnk"; }
+  bool is_physical_gamepad() const override { return false; }
   const char* input_trace_name() const override { return "mnk"; }
 
   X_RESULT GetCapabilities(uint32_t user_index, uint32_t flags,
