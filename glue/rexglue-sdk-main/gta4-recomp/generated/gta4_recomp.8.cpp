@@ -40318,7 +40318,7 @@ loc_8223F718:
 	REX_STORE_U32(ctx.r31.u32 + 4, ctx.r11.u32);
 	// bl 0x82a11f68
 	ctx.lr = 0x8223F72C;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// addi r1,r1,96
 	ctx.r1.s64 = ctx.r1.s64 + 96;
 	// lwz r12,-8(r1)

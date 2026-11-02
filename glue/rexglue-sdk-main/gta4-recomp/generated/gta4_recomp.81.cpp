@@ -40043,7 +40043,7 @@ loc_82A4F70C:
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r31.u32 + 0);
 	// bl 0x82a11f68
 	ctx.lr = 0x82A4F728;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 loc_82A4F728:
 	// addic. r30,r30,-1
 	ctx.xer.ca = ctx.r30.u32 > 0;
@@ -51674,7 +51674,7 @@ loc_82A54370:
 	ctx.r11.u32 = ea;
 	// bl 0x82a13618
 	ctx.lr = 0x82A543E0;
-	WriteFile(ctx, base);
+	gta4_WriteFile(ctx, base);
 	// mr r4,r30
 	ctx.r4.u64 = ctx.r30.u64;
 	// mr r3,r31
@@ -51761,12 +51761,12 @@ loc_82A54464:
 	ctx.r5.s64 = ctx.r1.s64 + 84;
 	// bl 0x82a127e0
 	ctx.lr = 0x82A54474;
-	SetFilePointer(ctx, base);
+	gta4_SetFilePointer(ctx, base);
 	// lwz r3,0(r29)
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r29.u32 + 0);
 	// bl 0x82a14c68
 	ctx.lr = 0x82A5447C;
-	SetEndOfFile(ctx, base);
+	gta4_SetEndOfFile(ctx, base);
 	// lwz r11,596(r31)
 	ctx.r11.u64 = REX_LOAD_U32(ctx.r31.u32 + 596);
 	// addi r30,r30,1
@@ -52002,7 +52002,7 @@ loc_82A545F8:
 	ctx.r4.s64 = ctx.r1.s64 + 192;
 	// bl 0x82a13618
 	ctx.lr = 0x82A54618;
-	WriteFile(ctx, base);
+	gta4_WriteFile(ctx, base);
 	// mr r4,r27
 	ctx.r4.u64 = ctx.r27.u64;
 	// lwz r3,364(r31)
@@ -52014,7 +52014,7 @@ loc_82A545F8:
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r31.u32 + 364);
 	// bl 0x82a11f68
 	ctx.lr = 0x82A5462C;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 loc_82A5462C:
 	// mr r30,r26
 	ctx.r30.u64 = ctx.r26.u64;
@@ -52029,7 +52029,7 @@ loc_82A54634:
 	if (ctx.cr6.eq) goto loc_82A54654;
 	// bl 0x82a11f68
 	ctx.lr = 0x82A54644;
-	CloseHandle(ctx, base);
+	gta4_CloseHandle(ctx, base);
 	// addi r30,r30,1
 	ctx.r30.s64 = ctx.r30.s64 + 1;
 	// addi r31,r31,4
@@ -53428,7 +53428,7 @@ loc_82A54F10:
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r11.u32 + ctx.r30.u32);
 	// bl 0x82a13618
 	ctx.lr = 0x82A54FA8;
-	WriteFile(ctx, base);
+	gta4_WriteFile(ctx, base);
 	// lbz r11,608(r30)
 	ctx.r11.u64 = REX_LOAD_U8(ctx.r30.u32 + 608);
 	// mr r4,r31
@@ -53799,7 +53799,7 @@ loc_82A551EC:
 	ctx.r3.s64 = ctx.r1.s64 + 112;
 	// bl 0x82a131b0
 	ctx.lr = 0x82A55238;
-	CreateFileA(ctx, base);
+	gta4_CreateFileA(ctx, base);
 	// cmpwi cr6,r3,-1
 	ctx.cr6.compare<int32_t>(ctx.r3.s32, -1, ctx.xer);
 	// stw r3,0(r28)
@@ -53849,12 +53849,12 @@ loc_82A55280:
 	ctx.r4.u64 = REX_LOAD_U32(ctx.r1.u32 + 84);
 	// bl 0x82a127e0
 	ctx.lr = 0x82A55294;
-	SetFilePointer(ctx, base);
+	gta4_SetFilePointer(ctx, base);
 	// lwz r3,0(r28)
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r28.u32 + 0);
 	// bl 0x82a14c68
 	ctx.lr = 0x82A5529C;
-	SetEndOfFile(ctx, base);
+	gta4_SetEndOfFile(ctx, base);
 	// lwz r11,596(r29)
 	ctx.r11.u64 = REX_LOAD_U32(ctx.r29.u32 + 596);
 	// addi r31,r31,1
@@ -53894,7 +53894,7 @@ loc_82A552C4:
 	ctx.r31.s64 = ctx.r31.s64 + 1;
 	// bl 0x82a14d10
 	ctx.lr = 0x82A552E4;
-	DeleteFileA(ctx, base);
+	gta4_DeleteFileA(ctx, base);
 	// cmpwi r3,0
 	ctx.cr0.compare<int32_t>(ctx.r3.s32, 0, ctx.xer);
 	// bne 0x82a552c4
@@ -53951,7 +53951,7 @@ loc_82A552C4:
 	ctx.r3.u64 = REX_LOAD_U32(ctx.r29.u32 + 20);
 	// bl 0x82a13618
 	ctx.lr = 0x82A55350;
-	WriteFile(ctx, base);
+	gta4_WriteFile(ctx, base);
 	// li r4,-1
 	ctx.r4.s64 = -1;
 	// lwz r3,364(r29)
