@@ -290,6 +290,10 @@ struct GuestTexture : GuestBaseTexture
     std::vector<std::unique_ptr<RenderTextureView>> framebufferViews;
     std::unique_ptr<GuestTexture> patchedTexture;
     struct GuestSurface* sourceSurface = nullptr;
+    // GTA IV: original Xenos format and per-mip CPU staging for the guest
+    // D3D lock path (sub_82A44168 / sub_82A42E88), which bypasses LockTextureRect.
+    uint32_t guestFormat = 0;
+    std::vector<void*> levelMemory;
 };
 
 struct GuestLockedRect

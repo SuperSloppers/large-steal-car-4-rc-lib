@@ -1,4 +1,5 @@
 #include "achievement_menu.h"
+#include <numbers>
 #include <api/Liberty.h>
 #include <gpu/imgui/imgui_snapshot.h>
 #include <gpu/video.h>
@@ -370,7 +371,7 @@ static void DrawTrophySparkles(ImVec2 min, ImVec2 max, int recordCount, int trop
         auto colour = IM_COL32(240, 240, 200, 200);
 
         static auto scaleStart = ImGui::GetTime();
-        auto scale = Scale(18) * Hermite(1.0f, 0.0f, (sin((ImGui::GetTime() - scaleStart) * (2.0f * M_PI / (15.0f / 60.0f))) + 1.0f) / 2.0f);
+        auto scale = Scale(18) * Hermite(1.0f, 0.0f, (sin((ImGui::GetTime() - scaleStart) * (2.0f * std::numbers::pi / (15.0f / 60.0f))) + 1.0f) / 2.0f);
 
         // Don't do extra sparkles for the silver trophy.
         if (isGoldTrophy)

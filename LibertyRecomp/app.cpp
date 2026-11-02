@@ -1,4 +1,7 @@
 #include "app.h"
+#ifdef _WIN32
+#include <timeapi.h>
+#endif
 #include <gpu/video.h>
 #include <install/installer.h>
 #include <kernel/function.h>

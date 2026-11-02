@@ -38,6 +38,7 @@ extern "C" bool SwitchAppletIsRunning(void);
 #include <hid/context_touch_host.h>
 #include <rex/cvar.h>
 REXCVAR_DECLARE(std::string, touch_controls);
+REXCVAR_DECLARE(uint32_t, rexcrt_heap_size_mb);
 #endif
 #include <user/paths.h>
 #include <user/registry.h>
@@ -84,6 +85,7 @@ REXCVAR_DECLARE(std::string, touch_controls);
 #include <rex/system/xobject.h>
 #include <rex/system/user_module.h>
 #include <rex/kernel/xam/apps/xgi_app.h>
+#include <rex/kernel/init.h>
 #include <rex/filesystem/vfs.h>
 #include <rex/filesystem/devices/host_path_device.h>
 #include <rex/kernel/crt/heap.h>
@@ -185,6 +187,46 @@ static bool RexFallbackCrashHandler(rex::arch::Exception* ex, void* /*data*/) {
                     (unsigned long)((uintptr_t)ex->pc() - (uintptr_t)info.dli_saddr));
             fprintf(stderr, "Image:         %s\n", info.dli_fname ? info.dli_fname : "(unknown)");
         }
+    }
+#endif
+#if defined(_WIN32)
+    {
+        // Module + RVA for the fault PC and the handler's call stack (which
+        // continues through KiUserExceptionDispatcher into the faulting frames).
+        auto describe = [](const void* addr) {
+            HMODULE mod = nullptr;
+            char path[MAX_PATH] = "(unknown)";
+            if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   (LPCSTR)addr, &mod)) {
+                GetModuleFileNameA(mod, path, MAX_PATH);
+            }
+            const char* base = strrchr(path, '\\');
+            // Nearest recompiled function at or below this host address.
+            size_t guest = 0;
+            uintptr_t best = 0;
+            for (int i = 0; PPCFuncMappings[i].guest != 0; ++i) {
+                uintptr_t h = (uintptr_t)PPCFuncMappings[i].host;
+                if (h && h <= (uintptr_t)addr && h > best) {
+                    best = h;
+                    guest = PPCFuncMappings[i].guest;
+                }
+            }
+            if (guest && (uintptr_t)addr - best < 0x100000)
+                fprintf(stderr, "  %p  %s+0x%llX  [guest sub_%08zX +0x%llX]\n", addr,
+                        base ? base + 1 : path,
+                        (unsigned long long)((uintptr_t)addr - (uintptr_t)mod), guest,
+                        (unsigned long long)((uintptr_t)addr - best));
+            else
+                fprintf(stderr, "  %p  %s+0x%llX\n", addr, base ? base + 1 : path,
+                        (unsigned long long)((uintptr_t)addr - (uintptr_t)mod));
+        };
+        fprintf(stderr, "Fault PC module:\n");
+        describe((const void*)ex->pc());
+        void* frames[48];
+        USHORT n = RtlCaptureStackBackTrace(0, 48, frames, nullptr);
+        fprintf(stderr, "Backtrace (%u frames):\n", (unsigned)n);
+        for (USHORT i = 0; i < n; ++i) describe(frames[i]);
     }
 #endif
     fprintf(stderr, "\nHeap state at crash:\n");
@@ -532,7 +574,7 @@ int main(int argc, char *argv[])
         if (!rex::diagnostics::Configure(diagnostics, diagnosticsCategories,
                                          &diagnosticsError)) {
             std::fprintf(stderr, "Liberty Recompiled: %s\n", diagnosticsError.c_str());
-            return CLI::ExitCodes::ValidationError;
+            return static_cast<int>(CLI::ExitCodes::ValidationError);
         }
 
         App::s_isSkipLogos = App::s_isSkipLogos || skipLogos;
@@ -620,6 +662,25 @@ int main(int argc, char *argv[])
     // content_root = game directory so RexGlue's VFS handles all file I/O.
     // RexGlue mounts this as \Device\Harddisk0\Partition1 with game: and d: symlinks.
     // GTA IV-specific symlinks (common:, platform:, audio:) are added after Setup().
+#if !REX_PLATFORM_CONSOLE && !defined(LIBERTY_RECOMP_EMBEDDED_ASSETS)
+    // Local fix: rex::Runtime::Setup() below fails (0xC0000001) when the game
+    // directory doesn't exist yet, so a fresh install never reached the wizard.
+    // Run the installer first; on success exit so the next launch starts clean
+    // with the game files in place (avoids creating the host device twice).
+    {
+        std::filesystem::path earlyModulePath;
+        const bool earlyInstalled = Installer::checkGameInstall(GetGamePath(), earlyModulePath);
+        if (!earlyInstalled || forceInstaller || forceDLCInstaller)
+        {
+            if (!Video::CreateHostDevice(sdlVideoDriver, graphicsApiRetry))
+                ShowVideoBackendErrorAndExit();
+            InstallerWizard::Run(GetGamePath(), earlyInstalled && forceDLCInstaller);
+            std::fprintf(stderr, "[Main] Installer finished; relaunch to start the game.\n");
+            std::_Exit(0);
+        }
+    }
+#endif
+
     DIAG_EMIT("[Main] Getting game path...\n");
     const auto gamePath = GetGamePath();
     DIAG_EMIT("[Main] Game path: %s\n", gamePath.string().c_str());
@@ -746,6 +807,9 @@ int main(int argc, char *argv[])
         // XBOXKRNL exports (XMACreateContext, XAudioRegisterRenderDriverClient,
         // etc.) handle all game audio calls with full Xenia-based implementations.
         rex::RuntimeConfig rexConfig;
+        // Without this the SDK never loads its HLE xboxkrnl/xam/xbdm modules,
+        // so the export tables are empty and no variable imports get patched.
+        rexConfig.kernel_init = rex::kernel::InitializeKernel;
 #if defined(LIBERTY_RECOMP_PS4)
         rexConfig.audio_factory = REX_AUDIO_BACKEND(rex::audio::orbis::OrbisAudioSystem);
 #elif REX_PLATFORM_NX
@@ -796,13 +860,7 @@ int main(int argc, char *argv[])
         rexConfig.live.lan_discovery_port = static_cast<uint16_t>(std::clamp<int32_t>(
             Config::LANBroadcastPort.Value, 1, std::numeric_limits<uint16_t>::max()));
 
-        uint32_t rt_status = s_rexRuntime->Setup(
-            static_cast<uint32_t>(PPC_CODE_BASE),
-            static_cast<uint32_t>(PPC_CODE_SIZE),
-            static_cast<uint32_t>(PPC_IMAGE_BASE),
-            static_cast<uint32_t>(PPC_IMAGE_SIZE),
-            PPCFuncMappings,
-            std::move(rexConfig));
+        uint32_t rt_status = s_rexRuntime->Setup(PPCImageConfig, std::move(rexConfig));
         DIAG_EMIT("[Main] Setup() returned 0x%08X\n", rt_status);
 
         // Xbox 360 timebase = exactly 50 MHz. Must be explicit because Liberty
@@ -826,7 +884,7 @@ int main(int argc, char *argv[])
         // this for ReXApp-derived apps, but Liberty owns its own main() so we
         // have to call it ourselves. Without this rexcrt_RtlAllocateHeap fails
         // with "kernel memory is null" on every guest alloc → SIGBUS.
-        if (!rex::kernel::crt::InitHeap(FLAGS_rexcrt_heap_size_mb, s_rexRuntime->memory())) {
+        if (!rex::kernel::crt::InitHeap(REXCVAR_GET(rexcrt_heap_size_mb), s_rexRuntime->memory())) {
             fprintf(stderr, "[Main] FATAL: rexcrt heap init failed\n");
             std::_Exit(1);
         }
@@ -836,7 +894,7 @@ int main(int argc, char *argv[])
             auto* p = s_rexRuntime->function_dispatcher();
             PPCFunc* xsf = p->GetFunction(0x82A11290);
             fprintf(stderr, "[DIAG] After Setup(): GetFunction(0x82A11290)=%p  HasFT=%d\n",
-                    (void*)xsf, (int)p->HasFunctionTable());
+                    (void*)xsf, (int)(xsf != nullptr));
             int total = 0, nullHost = 0;
             bool foundEntry = false;
             for (int i = 0; PPCFuncMappings[i].guest != 0; ++i) {
@@ -1146,8 +1204,16 @@ int main(int argc, char *argv[])
         // Unprotect so we can re-apply Liberty's header patches.
         auto* heap = rt->memory()->LookupHeap(PPC_IMAGE_BASE);
         if (heap) {
-            heap->Protect(PPC_IMAGE_BASE, PPC_IMAGE_SIZE,
-                          rex::memory::kMemoryProtectRead | rex::memory::kMemoryProtectWrite);
+            constexpr uint32_t kRW = rex::memory::kMemoryProtectRead | rex::memory::kMemoryProtectWrite;
+            if (!heap->Protect(PPC_IMAGE_BASE, PPC_IMAGE_SIZE, kRW)) {
+                // Whole-image Protect fails if the range spans several
+                // allocation regions (LoadXexImage maps sections separately).
+                // Fall back to just the page holding the GPU GOT entry below.
+                bool ok = heap->Protect(0x82000768, 4, kRW);
+                DIAG_EMIT("[Main] Image Protect failed; GOT page Protect %s\n", ok ? "ok" : "FAILED");
+            }
+        } else {
+            DIAG_EMIT("[Main] No heap for image base 0x%08X\n", (uint32_t)PPC_IMAGE_BASE);
         }
         DIAG_EMIT("[Main] XEX loaded — PE data sections now authoritative\n");
     }
@@ -1226,7 +1292,7 @@ int main(int argc, char *argv[])
         auto* p = rt->function_dispatcher();
         PPCFunc* xsf = p->GetFunction(0x82A11290);
         fprintf(stderr, "[DIAG] Before LaunchModule(): GetFunction(0x82A11290)=%p  HasFT=%d  instance=%p\n",
-                (void*)xsf, (int)p->HasFunctionTable(), (void*)rt);
+                (void*)xsf, (int)(xsf != nullptr), (void*)rt);
         fflush(stderr);
     }
     auto main_xthread = rt->LaunchModule();
@@ -1257,6 +1323,17 @@ int main(int argc, char *argv[])
     }
     if (!main_xthread->is_running()) {
         DIAG_EMIT("[Main] WARNING: XThread did not start within 5 seconds\n");
+#if defined(_WIN32)
+        if (auto* ht = main_xthread->thread()) {
+            HANDLE h = (HANDLE)ht->native_handle();
+            DWORD prev = SuspendThread(h);
+            if (prev != (DWORD)-1) ResumeThread(h);
+            DWORD code = 0;
+            GetExitCodeThread(h, &code);
+            DIAG_EMIT("[Main] host thread %p: suspend_count=%ld exit_code=0x%lX guest_suspend=%u\n",
+                      (void*)h, (long)prev, code, main_xthread->suspend_count());
+        }
+#endif
     }
 
     // Main thread: pump SDL events while game runs on XThread.

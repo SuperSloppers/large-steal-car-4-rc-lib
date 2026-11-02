@@ -11,12 +11,14 @@
 #include <cmath>
 #include <array>
 
+// Local fix: the _WIN32 DLSS/FSR3/XeSS paths are stale against the reworked
+// UpscaleParams/DispatchParams; gated off until they're ported.
 #ifdef __APPLE__
 #include <TargetConditionals.h>
 #include "upscaler_metalfx.h"
 #endif
 
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
 #include "upscaler_fsr3.h"
 #include "upscaler_dlss.h"
 #endif
@@ -62,7 +64,7 @@ float GetOutputScale(Quality quality) {
 // =============================================================================
 // Quality Mapping Utilities
 // =============================================================================
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
 static FSR3Quality ToFSR3Quality(Quality quality) {
     switch (quality) {
         case Quality::UltraQuality:     return FSR3Quality::UltraQuality;
@@ -174,7 +176,7 @@ public:
         m_displayWidth = displayWidth;
         m_displayHeight = displayHeight;
         
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         // Use real FSR 3.0 implementation
         if (FSR3Context::IsAvailable()) {
             m_fsr3Context = std::make_unique<FSR3Context>();
@@ -213,7 +215,7 @@ public:
     }
     
     void Shutdown() override {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         if (m_fsr3Context) {
             m_fsr3Context->Shutdown();
             m_fsr3Context.reset();
@@ -224,7 +226,7 @@ public:
     }
     
     bool IsAvailable() const override {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         return FSR3Context::IsAvailable();
 #else
         return false;
@@ -235,7 +237,7 @@ public:
     Quality GetQuality() const override { return m_quality; }
     void SetQuality(Quality quality) override { 
         m_quality = quality;
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         if (m_fsr3Context) {
             FSR3Quality fsr3Quality = FSR3Quality::Quality;
             switch (quality) {
@@ -252,7 +254,7 @@ public:
     
     void GetRenderDimensions(uint32_t displayWidth, uint32_t displayHeight,
                              uint32_t& renderWidth, uint32_t& renderHeight) const override {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         FSR3Quality fsr3Quality = FSR3Quality::Quality;
         switch (m_quality) {
             case Quality::UltraQuality:     fsr3Quality = FSR3Quality::Quality; break;
@@ -272,7 +274,7 @@ public:
     }
     
     void GetJitter(uint32_t frameIndex, float& jitterX, float& jitterY) const override {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         if (m_fsr3Context) {
             m_fsr3Context->GetJitterOffset(frameIndex, jitterX, jitterY);
             return;
@@ -282,7 +284,7 @@ public:
     }
     
     bool Upscale(const UpscaleParams& params) override {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         if (!m_initialized || !m_fsr3Context) return false;
         
         // Prepare FSR3 dispatch parameters
@@ -312,7 +314,7 @@ public:
     }
     
     bool SupportsFrameGeneration() const override { 
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         return m_fsr3Context ? m_fsr3Context->SupportsFrameGeneration() : false;
 #else
         return false;
@@ -320,7 +322,7 @@ public:
     }
     
     bool GenerateFrame(const FrameGenParams& params) override {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         if (!m_initialized || !m_fsr3Context) return false;
         // Frame generation requires D3D12 integration
         return m_fsr3Context->SupportsFrameGeneration();
@@ -334,7 +336,7 @@ private:
     Quality m_quality = Quality::Quality;
     uint32_t m_displayWidth = 0;
     uint32_t m_displayHeight = 0;
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
     std::unique_ptr<FSR3Context> m_fsr3Context;
 #endif
 };
@@ -349,7 +351,7 @@ public:
         m_displayWidth = displayWidth;
         m_displayHeight = displayHeight;
         
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         // Use real DLSS implementation
         if (DLSSContext::IsAvailable()) {
             m_dlssContext = std::make_unique<DLSSContext>();
@@ -391,7 +393,7 @@ public:
     }
     
     void Shutdown() override {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         if (m_dlssContext) {
             m_dlssContext->Shutdown();
             m_dlssContext.reset();
@@ -402,7 +404,7 @@ public:
     }
     
     bool IsAvailable() const override {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         return DLSSContext::IsAvailable();
 #else
         return false;
@@ -413,7 +415,7 @@ public:
     Quality GetQuality() const override { return m_quality; }
     void SetQuality(Quality quality) override { 
         m_quality = quality;
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         if (m_dlssContext) {
             DLSSQuality dlssQuality = DLSSQuality::Quality;
             switch (quality) {
@@ -430,7 +432,7 @@ public:
     
     void GetRenderDimensions(uint32_t displayWidth, uint32_t displayHeight,
                              uint32_t& renderWidth, uint32_t& renderHeight) const override {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         DLSSQuality dlssQuality = DLSSQuality::Quality;
         switch (m_quality) {
             case Quality::UltraQuality:     dlssQuality = DLSSQuality::UltraQuality; break;
@@ -448,7 +450,7 @@ public:
     }
     
     void GetJitter(uint32_t frameIndex, float& jitterX, float& jitterY) const override {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         if (m_dlssContext) {
             m_dlssContext->GetJitterOffset(frameIndex, jitterX, jitterY);
             return;
@@ -458,7 +460,7 @@ public:
     }
     
     bool Upscale(const UpscaleParams& params) override {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         if (!m_initialized || !m_dlssContext) return false;
         
         // Prepare DLSS dispatch parameters
@@ -487,7 +489,7 @@ public:
     }
     
     bool SupportsFrameGeneration() const override {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         return m_dlssContext ? m_dlssContext->SupportsFrameGeneration() : false;
 #else
         return false;
@@ -495,7 +497,7 @@ public:
     }
     
     bool GenerateFrame(const FrameGenParams& params) override {
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         if (!m_initialized || !m_dlssContext) return false;
         return m_dlssContext->SupportsFrameGeneration();
 #else
@@ -508,12 +510,12 @@ private:
     Quality m_quality = Quality::Quality;
     uint32_t m_displayWidth = 0;
     uint32_t m_displayHeight = 0;
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
     std::unique_ptr<DLSSContext> m_dlssContext;
 #endif
 };
 
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
 // =============================================================================
 // XeSS Context (Intel Arc + All DP4a GPUs)
 // Uses Intel XeSS SDK - supports both D3D12 and Vulkan
@@ -528,7 +530,7 @@ public:
         if (XeSSContext::IsAvailable()) {
             m_xessContext = std::make_unique<XeSSContext>();
             
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
             // Get D3D12 device from global state
             ID3D12Device* d3d12Device = static_cast<ID3D12Device*>(GetGraphicsDevice());
             if (!d3d12Device) {
@@ -621,7 +623,7 @@ public:
     bool Upscale(const UpscaleParams& params) override {
         if (!m_initialized || !m_xessContext) return false;
         
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         // Prepare XeSS dispatch parameters for D3D12
         XeSSDispatchParamsD3D12 dispatchParams = {};
         dispatchParams.commandList = static_cast<ID3D12GraphicsCommandList*>(params.commandList);
@@ -824,7 +826,7 @@ private:
 std::unique_ptr<IUpscalerContext> CreateUpscaler(Backend backend) {
     switch (backend) {
         case Backend::FSR1:    return std::make_unique<FSR1Context>();
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
         case Backend::FSR3:    return std::make_unique<FSR3ContextWrapper>();
         case Backend::DLSS:    return std::make_unique<DLSSContextWrapper>();
         case Backend::XeSS:    return std::make_unique<XeSSContextWrapper>();
@@ -884,7 +886,7 @@ const char* GetBackendStatusString(Backend backend) {
             return "Pending (PostProcessRenderer not initialized)";
             
         case Backend::FSR3:
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
             if (FSR3Context::IsAvailable()) {
                 return "Available (AMD FidelityFX SDK)";
             }
@@ -894,7 +896,7 @@ const char* GetBackendStatusString(Backend backend) {
 #endif
             
         case Backend::DLSS:
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
             if (DLSSContext::IsAvailable()) {
                 return "Available (NVIDIA NGX SDK)";
             }
@@ -904,7 +906,7 @@ const char* GetBackendStatusString(Backend backend) {
 #endif
             
         case Backend::XeSS:
-#ifdef _WIN32
+#if defined(_WIN32) && defined(LIBERTY_RECOMP_LEGACY_WIN_UPSCALERS)
             if (XeSSContext::IsAvailable()) {
                 return "Available (Intel XeSS SDK)";
             }
